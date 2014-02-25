@@ -1,0 +1,82 @@
+#!/bin/bash
+# first open the vi hadoopinstall file press "esc" key and type #the following command
+#:set fileformat=unix
+#save the file :wq and then execute the file
+t=/
+cd $t
+#chmod 777 jdk-6u34-linux-x64-rpm
+#./jdk-6u34-linux-x64-rpm
+#export JAVA_HOME=/usr/java/jdk1.6.0_32/
+#export PATH=$PATH:/usr/java/jdk1.6.0_32/
+echo UNINSTALLING PREVIOUS VERSION
+sudo yum remove hadoop-0.20
+sudo yum remove cdh3-repository-1.0-1.noarch.rpm
+sudo yum remove cdh3-repository-1.0-1.noarch
+rm -rf cdh3-repository-1.0-1.noarch.rpm
+rm -rf hadoop
+echo uninstall done!!
+wget http://archive.cloudera.com/redhat/6/x86_64/cdh/cdh3-repository-1.0-1.noarch.rpm
+sleep 30
+sudo yum --nogpgcheck localinstall cdh3-repository-1.0-1.noarch.rpm
+sleep 30
+yum install hadoop-0.20
+while true
+do
+echo enter the service no to install
+echo 1.namenode
+echo 2.secondaryname node
+echo 3.jobtracker
+echo 4.datanode
+echo 5.tasktracker
+echo 6.done installing
+read x
+if [ "$x" == "1" ]
+then
+yum install hadoop-0.20-namenode -y
+elif [ "$x" == "2" ]
+then
+yum install hadoop-0.20-secondarynamenode -y
+elif [ "$x" == "3" ]
+then
+yum install hadoop-0.20-jobtracker -y
+elif [ "$x" == "4" ]
+then
+yum install hadoop-0.20-datanode -y
+elif [ "$x" == "5" ]
+then
+yum install hadoop-0.20-tasktracker -y
+else
+echo Proceding Further..
+break
+fi
+echo "You Have Installed Service No : $x"
+done
+hadoop version
+cd /
+echo Creating hadoop Directory...
+mkdir hadoop
+cd hadoop
+echo Creating hdfs Driectory inside hadoop Directory...
+mkdir hdfs
+cd hdfs
+echo Creating name,data,namesecondary directories inside hdfs...
+mkdir name
+mkdir data
+mkdir namesecondary
+cd /
+echo CHANGING OWNER AND GROUP OF HADOOP DIRECTORY TO HDFS,HADOOP...
+chown -R hdfs:hadoop hadoop
+cat /home/cloudera/Desktop/core-site > /usr/lib/hadoop-0.20/conf/core-site.xml
+cat /home/cloudera/Desktop/hdfs-site > /usr/lib/hadoop-0.20/conf/hdfs-site.xml
+cat /home/cloudera/Desktop/mapred-site > /usr/lib/hadoop-0.20/conf/mapred-site.xml
+sudo –u hdfs  /usr/lib/hadoop/bin/hadoop namenode –format
+service iptables stop
+etc/init.d/hadoop-0.20-namenode start
+etc/init.d/hadoop-0.20-secondarynamenode start
+etc/init.d/hadoop-0.20-datanode start
+sudo -u hdfs hadoop fs -mkdir /tmp
+sudo -u hdfs hadoop fs -chown -R mapred:supergroup /tmp
+etc/init.d/hadoop-0.20-jobtracker start
+etc/init.d/hadoop-0.20-tasktracker start
+netstat -plten
+echo UPDATE /etc/hosts file and master and slave files.....
