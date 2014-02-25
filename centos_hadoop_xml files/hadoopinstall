@@ -1,4 +1,5 @@
 #!/bin/bash
+#copy core,hdfs,mapred site to root location (/)
 # first open the vi hadoopinstall file press "esc" key and type #the following command
 #:set fileformat=unix
 #save the file :wq and then execute the file
