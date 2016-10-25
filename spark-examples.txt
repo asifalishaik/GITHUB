@@ -1,0 +1,523 @@
+
+
+x = sc.parallelize(["spark rdd example", "sample example"])
+y = x.flatMap(lambda x: x.split(' '))
+y.collect()
+
+
+Word_count:
+x = sc.parallelize(["spark rdd example", "sample example"])
+y = x.flatMap(lambda x: x.split(' ')).map(lambda word: (word,1)).reduceByKey(lambda a, b: a + b)
+y.collect()
+
+groupBy:
+dt = sc.parallelize(["ABC","BCD","ABD"])
+res = dt.groupBy(lambda word: word[0])
+#print([(t[0],[i for i in t[1]]) for t in res.collect()])
+for t in res.collect():
+  print(t[0],[i for i in t[1]])
+
+++++++++++++++++++++++
+('A', ['ABC', 'ABD'])
+('B', ['BCD'])
+++++++++++++++++++++++
+
+reduce:
+x = sc.parallelize([1,2,3,4,5,6,7,8,9,10])
+res_sum = x.reduce( lambda a, b: a + b)
+print(res_sum)
+
+reduceByKey:
+x = sc.parallelize([("a", 1), ("b", 1), ("a", 1), ("a", 1),("b", 1), ("b", 1), ("b", 1), ("b", 1)])
+y = x.reduceByKey( lambda accum, n: accum + n)
+y.collect()
+
+https://spark.apache.org/docs/1.6.1/api/python/pyspark.sql.html
+
+HiveContext on views:
+
+from pyspark import HiveContext
+sqlContext = HiveContext(sc)
+dt_a = sqlContext.sql("select a.datadate,count(*) FROM dmrwork.vactivity a LEFT OUTER JOIN dmrwork.vactivity_description b ON (a.Activity_Wid = b.Activity_Wid) and (a.datadate = b.datadate) LEFT OUTER JOIN dmrwork.vactivity_products c ON (a.Activity_Wid = c.Activity_Wid) and (a.datadate = c.datadate) LEFT OUTER JOIN dmrwork.vactivity_trends d ON (a.siebel_activity_id = d.siebel_activity_id) and (a.datadate = d.datadate) LEFT OUTER JOIN dmrwork.vactivity_topics e ON (a.siebel_activity_id = e.siebel_activity_id) and (a.datadate = e.datadate) LEFT OUTER JOIN (select vactivitycoveragecrewassignment.Activity_Wid, vactivitycoveragecrewassignment.datadate, vactivitycoveragecrewassignment.emp_login,vPosition.BASE_LOGIN,vPosition.BASE_EMP_ID,vVGI_Employee.Siebel_Position_Id,vVGI_Employee.Employee_Login,vVGI_Employee.Employee_First_Name, vVGI_Employee.Employee_Last_Name from dmrwork.vactivitycoveragecrewassignment LEFT OUTER JOIN dmrwork.vVGI_Employee ON ((vactivitycoveragecrewassignment.Employee_Wid = vVGI_Employee.Employee_Wid) AND (vactivitycoveragecrewassignment.datadate = vVGI_Employee.datadate)) LEFT OUTER JOIN dmrwork.vPosition ON ((vVGI_Employee.Siebel_Position_Id = vPosition.Siebel_Position_ID) and (vVGI_Employee.datadate = vPosition.datadate))) ACTIVITY_EMP ON (a.Activity_Wid = ACTIVITY_EMP.Activity_Wid) and (a.datadate = ACTIVITY_EMP.datadate) LEFT OUTER JOIN dmrwork.vactivity_external_participants g ON (a.Activity_Wid = g.Activity_Wid) and (a.datadate = g.datadate) LEFT OUTER JOIN dmrwork.VActivity_Override h ON (a.Activity_Wid = h.Activity_Wid) and (a.datadate = h.datadate) GROUP BY a.datadate")
+dt_a.collect()
+
+Reading Avro file in SQLContext:
+from pyspark import SQLContext
+sqlContext = SQLContext(sc)
+df = sqlContext.read.format("com.databricks.spark.avro").load("hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/Repository/SiebelBI/W_ACTIVITY_F/datadate=20160406/")
+subset = df.where("ACTUAL_START_DT = '2006-06-06 15:22:30'")
+subset.collect()
+
+
+Join on files:
+from pyspark import SQLContext
+from pyspark.sql.functions import *
+sqlContext = SQLContext(sc)
+W_ACTIVITY_F = sqlContext.read.format("com.databricks.spark.avro").load("hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/Repository/SiebelBI/W_ACTIVITY_F/datadate=20160406/")
+W_DAY_D = sqlContext.read.format("com.databricks.spark.avro").load("hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/Repository/SiebelBI/W_DAY_D/datadate=20160406/")
+joined_df = W_ACTIVITY_F.alias("df1").join(W_DAY_D.alias("df2"), col("df1.X_ACTIVITY_DT_WID") == col("df2.ROW_WID"), "left")
+joined_df.select(col("df1.X_ACTIVITY_DT_WID"), col("df2.ROW_WID"), col("df1.CHANGED_BY_WID")).take(6)
+
+Adding new columns and alias names to columns in dataframe ( vcompany view ):
+Adding new columns to dataframe:
+
+http://stackoverflow.com/questions/33681487/how-do-i-add-a-new-column-to-spark-data-frame-pyspark
+
+from pyspark.sql.functions import *
+from pyspark.sql.functions import lit
+from pyspark import SQLContext
+sqlContext = SQLContext(sc)
+W_ORG_DX = sqlContext.read.format("com.databricks.spark.avro").load("hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/Repository/SiebelBI/W_ORG_DX/datadate=20160412/")
+
+W_PARTY_ORG_D = sqlContext.read.format("com.databricks.spark.avro").load("hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/Repository/SiebelBI/W_PARTY_ORG_D/datadate=20160412/")
+
+W_EMPLOYEE_D = sqlContext.read.format("com.databricks.spark.avro").load("hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/Repository/SiebelBI/W_EMPLOYEE_D/datadate=20160412/")
+
+WC_EMPLOYEE_DX = sqlContext.read.format("com.databricks.spark.avro").load("hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/Repository/SiebelBI/WC_EMPLOYEE_DX/datadate=20160412/")
+
+
+joined_df = W_ORG_DX.alias("W_ORG_DX_df1").join(W_PARTY_ORG_D.alias("W_PARTY_ORG_D_df2"), col("W_ORG_DX_df1.ROW_WID") == col("W_PARTY_ORG_D_df2.ROW_WID"), "inner")
+
+joined_df2 = W_EMPLOYEE_D.alias("W_EMPLOYEE_D_df1").join(WC_EMPLOYEE_DX.alias("WC_EMPLOYEE_DX_df2"), col("W_EMPLOYEE_D_df1.ROW_WID") == col("WC_EMPLOYEE_DX_df2.ROW_WID"), "inner")
+
+col_from_joined_df = joined_df.select(col("W_PARTY_ORG_D_df2.ACCNT_LOC").alias("Branch_Site"),col("W_ORG_DX_df1.ATTRIB_07").alias("Sales_Tier"),col("W_ORG_DX_df1.ATTRIB_09").alias("Company_Dual_Reg_Flag"),col("W_ORG_DX_df1.ATTRIB_39").alias("CRD_Number"),col("W_ORG_DX_df1.ATTRIB_41").alias("FDIC_Number"),col("W_ORG_DX_df1.BRLOC_ATTRIB06").alias("Closest_Major_City"),col("W_PARTY_ORG_D_df2.CITY_NAME").alias("City"),col("W_PARTY_ORG_D_df2.COUNTRY_NAME").alias("Country"),col("W_PARTY_ORG_D_df2.CURRENT_FLG"),col("W_ORG_DX_df1.X_CUST_SINCE_DT"),col("W_PARTY_ORG_D_df2.CUST_STATUS_NAME"),col("W_PARTY_ORG_D_df2.CUST_TYPE_NAME").alias("Company_Type"),col("W_PARTY_ORG_D_df2.CUST_VALUE_NAME").alias("FAS_Customer_Tier_Marketing"),col("W_PARTY_ORG_D_df2.DUNS_NUM").alias("DUNS_Number"),col("W_PARTY_ORG_D_df2.EXCHANGE_LOC").alias("Stock_Exchange"),col("W_ORG_DX_df1.IAM_RM_RE").alias("IAM_Manager"),col("W_ORG_DX_df1.INTEGRATION_ID").alias("Siebel_Company_Id"),col("W_PARTY_ORG_D_df2.MAIN_PH_NUM").alias("Main_Phone_Number"),col("W_PARTY_ORG_D_df2.OPER_INCOME").alias("Net_Operation_Margin_NOM"),col("W_PARTY_ORG_D_df2.ORG_NAME").alias("Company_Name"),col("W_ORG_DX_df1.ORGEXT2FNX_ATTRIB_19").alias("Sales_DC_Assets_logical_Sales_DC_Assets_M"),col("W_ORG_DX_df1.ORGEXT2FNX_ATTRIB_21").alias("Number_of_Sales_DC_Parts"),col("W_ORG_DX_df1.ORGEXT2FNX_ATTRIB_22").alias("Sales_DB_Assets_logical_Sales_DB_Assets_M"),col("W_ORG_DX_df1.ORGEXT2FNX_ATTRIB_24").alias("Number_of_Sales_DB_Parts"),col("W_ORG_DX_df1.ORGEXT2FNX_ATTRIB_25").alias("Sales_EandF_Assets"),col("W_ORG_DX_df1.ORGEXT2FNX_X_ATTRIB_02").alias("Sales_Other_Assets"),col("W_ORG_DX_df1.ORGEXT2FNX_X_ATTRIB_07").alias("Marketing_Segment"),col("W_ORG_DX_df1.ORGEXTX_ATTRIB_35").alias("Sub_Region_Zone"),col("W_PARTY_ORG_D_df2.PAR_ORG_NAME").alias("Parent_Company"),col("W_PARTY_ORG_D_df2.POSTAL_CODE").alias("Postal_Code"),col("W_ORG_DX_df1.ROW_WID").alias("Company_Wid"),col("W_PARTY_ORG_D_df2.ST_ADDRESS1").alias("Address_Line_1"),col("W_PARTY_ORG_D_df2.STATE_NAME").alias("State_Province"),col("W_PARTY_ORG_D_df2.TICKER").alias("Ticker_Symbol"),col("W_ORG_DX_df1.X_ACCNT_VAL_CD").alias("Company_Tier"),col("W_ORG_DX_df1.X_ACCNT_VAL_CD_CHG_NAME").alias("Tier_Changed_By_Name"),col("W_ORG_DX_df1.X_ACCNT_VAL_CD_CHG_UID").alias("Tier_Changed_By_Login"),col("W_ORG_DX_df1.X_ACTIVITY_DT_WID").alias("Company_Last_Activity_Date_Wid"),col("W_ORG_DX_df1.X_ALIAS_NAME").alias("Preferred_Name"),col("W_ORG_DX_df1.X_AUTH_PRCPT_FLG").alias("Authorized_Participant"),col("W_ORG_DX_df1.X_AVAIL_CREDIT_AMT").alias("Total_Assets_Managed_by_VGI"),col("W_ORG_DX_df1.X_AVG_CLIENT_AUM").alias("Average_Client_AUM"),col("W_ORG_DX_df1.X_AVG_PROD_REP").alias("Average_Production_Per_Rep"),col("W_ORG_DX_df1.X_BP_ENROL_INTRVL").alias("Annual_Education_Allocation"),col("W_ORG_DX_df1.X_BROADRIDGE_FIRM_ID").alias("Broadridge_Firm_ID"),col("W_ORG_DX_df1.X_BUS_PROFILE").alias("FAS_RM_Company_Notes"),col("W_ORG_DX_df1.X_BUS_TYPE_CD").alias("Industry"),col("W_ORG_DX_df1.X_BUZ_POTENTIAL").alias("Vanguard_Fit"),col("W_ORG_DX_df1.X_BUZ_POTENTIAL_CHG_NAME").alias("Vanguard_Fit_Changed_By_Name"),col("W_ORG_DX_df1.X_BUZ_POTENTIAL_CHG_UID").alias("Vanguard_Fit_Changed_By_Login"),col("W_ORG_DX_df1.X_CASH_ON_HAND").alias("Annual_Total_Out_of_Pocket"),col("W_ORG_DX_df1.X_CMPNY_SCORE").alias("Company_Score"),col("W_ORG_DX_df1.X_CNSULT_BUSLINE_FLG").alias("Consultant_Client_BusinessLine_Subline"),col("W_ORG_DX_df1.X_COATES_FIRM_ID").alias("Coates_Firm_Id"),col("W_ORG_DX_df1.X_COMP_SUB_TIER").alias("Company_Sub_Tier"),col("W_ORG_DX_df1.X_COMP_SUB_TIER_OVRD").alias("Company_Sub_Tier_Override"),col("W_ORG_DX_df1.X_COMPANY_STATUS").alias("Company_Status"),col("W_ORG_DX_df1.X_CONS_REL_COMP_TIER").alias("Consultant_Relations_Company_Tier"),col("W_ORG_DX_df1.X_CONS_REL_TERRITORY").alias("Consultant_Relations_Territory"),col("W_ORG_DX_df1.X_COUNT_FAS_ACTIVITY_YTD").alias("FAS_Visits_Count_YTD"),col("W_ORG_DX_df1.X_CURR_ASSETS_WITH_VG").alias("Current_Assets_With_Vanguard"),col("W_ORG_DX_df1.X_CURR_ASSETS_WITH_VG_CHG_NAME").alias("Current_Assets_With_Vanguard_Changed_By_Name"),col("W_ORG_DX_df1.X_CURR_ASSETS_WITH_VG_CHG_UID").alias("Current_Assets_With_Vanguard_Changed_By_Login"),col("W_ORG_DX_df1.X_CUS_DTC_MNTH_ADJUSTMENTS").alias("Month_End_Adjustments_DTC"),col("W_ORG_DX_df1.X_CUS_DTC_MNTH_CF").alias("Month_End_Cashflow_DTC"),col("W_ORG_DX_df1.X_CUS_DTC_MNTH_PURCHASES").alias("Month_End_Purchases_DTC"),col("W_ORG_DX_df1.X_CUS_DTC_MNTH_REDEMPTIONS").alias("Month_End_Redemptions_DTC"),col("W_ORG_DX_df1.X_CUS_DTC_PMNTH_ASSETS").alias("Prior_Month_End_Assets_DTC"),col("W_ORG_DX_df1.X_CUS_DTC_YTD_ADJUSTMENTS").alias("YTD_Adjustments_DTC"),col("W_ORG_DX_df1.X_CUS_DTC_YTD_ASSETS").alias("Month_End_Assets_DTC"),col("W_ORG_DX_df1.X_CUS_DTC_YTD_CF").alias("YTD_Cashflow_DTC"),col("W_ORG_DX_df1.X_CUS_PERSH_MNTH_ADJUSTMENTS").alias("Month_End_Adjustments_Pershing"),col("W_ORG_DX_df1.X_CUS_PERSH_MNTH_CF").alias("Month_End_Cashflow_Pershing"),col("W_ORG_DX_df1.X_CUS_PERSH_MNTH_PURCHASES").alias("Month_End_Purchases_Pershing"),col("W_ORG_DX_df1.X_CUS_PERSH_MNTH_REDEMPTIONS").alias("Month_End_Redemptions_Pershing"),col("W_ORG_DX_df1.X_CUS_PERSH_PMNTH_ASSETS").alias("Prior_Month_End_Assets_Pershing"),col("W_ORG_DX_df1.X_CUS_PERSH_YTD_ADJUSTMENTS").alias("YTD_Adjustments_Pershing"),col("W_ORG_DX_df1.X_CUS_PERSH_YTD_ASSETS").alias("Month_End_Assets_Pershing"),col("W_ORG_DX_df1.X_CUS_PERSH_YTD_CF").alias("YTD_Cashflow_Pershing"),col("W_ORG_DX_df1.X_CUS_SCHWB_MNTH_ADJUSTMENTS").alias("Month_End_Adjustments_Schwab"),col("W_ORG_DX_df1.X_CUS_SCHWB_MNTH_CF").alias("Month_End_Cashflow_Schwab"),col("W_ORG_DX_df1.X_CUS_SCHWB_MNTH_PURCHASES").alias("Month_End_Purchases_Schwab"),col("W_ORG_DX_df1.X_CUS_SCHWB_MNTH_REDEMPTIONS").alias("Month_End_Redemptions_Schwab"),col("W_ORG_DX_df1.X_CUS_SCHWB_PMNTH_ASSETS").alias("Prior_Month_End_Assets_Schwab"),col("W_ORG_DX_df1.X_CUS_SCHWB_YTD_ADJUSTMENTS").alias("YTD_Adjustments_Schwab"),col("W_ORG_DX_df1.X_CUS_SCHWB_YTD_ASSETS").alias("Month_End_Assets_Schwab"),col("W_ORG_DX_df1.X_CUS_SCHWB_YTD_CF").alias("YTD_Cashflow_Schwab"),col("W_ORG_DX_df1.X_CUS_TOT_MNTH_ADJUSTMENTS").alias("Month_End_Adjustments_Total"),col("W_ORG_DX_df1.X_CUS_TOT_MNTH_CF").alias("Month_End_Cashflow_Total"),col("W_ORG_DX_df1.X_CUS_TOT_MNTH_PURCHASES").alias("Month_End_Purchases_Total"),col("W_ORG_DX_df1.X_CUS_TOT_MNTH_REDEMPTIONS").alias("Month_End_Redemptions_Total"),col("W_ORG_DX_df1.X_CUS_TOT_PMNTH_ASSETS").alias("Prior_Month_End_Assets_Total"),col("W_ORG_DX_df1.X_CUS_TOT_YTD_ADJUSTMENTS").alias("YTD_Adjustments_Total"),col("W_ORG_DX_df1.X_CUS_TOT_YTD_ASSETS").alias("Month_End_Assets_Total"),col("W_ORG_DX_df1.X_CUS_TOT_YTD_CF").alias("YTD_Cashflow_Total"),col("W_ORG_DX_df1.X_CUS_VCATS_MNTH_ADJUSTMENTS").alias("Month_End_Adjustments_VCATS"),col("W_ORG_DX_df1.X_CUS_VCATS_MNTH_CF").alias("Month_End_Cashflow_VCATS"),col("W_ORG_DX_df1.X_CUS_VCATS_MNTH_PURCHASES").alias("Month_End_Purchases_VCATS"),col("W_ORG_DX_df1.X_CUS_VCATS_MNTH_REDEMPTIONS").alias("Month_End_Redemptions_VCATS"),col("W_ORG_DX_df1.X_CUS_VCATS_PMNTH_ASSETS").alias("Prior_Month_End_Assets_VCATS"),col("W_ORG_DX_df1.X_CUS_VCATS_YTD_ADJUSTMENTS").alias("YTD_Adjustments_VCATS"),col("W_ORG_DX_df1.X_CUS_VCATS_YTD_ASSETS").alias("Month_End_Assets_VCATS"),col("W_ORG_DX_df1.X_CUS_VCATS_YTD_CF").alias("YTD_Cashflow_VCATS"),col("W_ORG_DX_df1.X_DB_ASSETS").alias("DB_Assets"),col("W_ORG_DX_df1.X_DC_ASSETS").alias("DC_Assets"),col("W_ORG_DX_df1.X_DC_DB_SALES_RATING").alias("DC_DB_Sales_Rating"),col("W_ORG_DX_df1.X_DC_RECORDKEEPER").alias("DC_Recordkeeper"),col("W_ORG_DX_df1.X_EB_ASSETS").alias("EB_Assets"),col("W_ORG_DX_df1.X_ETF_AUM").alias("ETF"),col("W_ORG_DX_df1.X_ETF_AUM_CHG_NAME").alias("ETF_Changed_By_Name"),col("W_ORG_DX_df1.X_ETF_AUM_CHG_UID").alias("ETF_Changed_By_Login"),col("W_ORG_DX_df1.X_FAS_BD_CLIENT_NAME").alias("FAS_BD_Client_Name"),col("W_ORG_DX_df1.X_FAS_BUSLINE_FLG").alias("FAS_Client_BusinessLine_Subline"),col("W_ORG_DX_df1.X_FAS_RM_NO_OF_ACTS").alias("Number_of_FAS_RM_Company_Activities"),col("W_ORG_DX_df1.X_FAS_RM_NO_OF_PERCONS").alias("Number_of_FAS_RM_Company_Personal_Contacts"),col("W_ORG_DX_df1.X_FAS_RM_NO_OF_VISITS").alias("Number_of_FAS_RM_Company_Visits"),col("W_ORG_DX_df1.X_FAS_TERR_WID").alias("FAS_Territory_Wid"),col("W_ORG_DX_df1.X_FEE_BASED").alias("Percent_Fee_Based"),col("W_ORG_DX_df1.X_FEE_STRUCT").alias("Fee_Structure"),col("W_ORG_DX_df1.X_FIRM_AUM").alias("Firms_AUM"),col("W_ORG_DX_df1.X_FIRM_BRMCH_ID").alias("Firm_Branch_Id"),col("W_ORG_DX_df1.X_FORMER_NAME").alias("Former_Name"),col("W_ORG_DX_df1.X_FREQ_OF_CALLS").alias("Frequency_of_Calls"),col("W_ORG_DX_df1.X_GEO_LOC_TYPE_STAT_CD").alias("Geo_Radius_Status_IAM_Business"),col("W_ORG_DX_df1.X_IACCESS_RAT_VAL").alias("Access_Rating_IAM_Business"),col("W_ORG_DX_df1.X_IAM_BUSLINE_FLG").alias("IAM_Client_BusinessLine_Subline"),col("W_ORG_DX_df1.X_IAM_EF_BUSLINE_FLG").alias("IAM_EandF_Client_BusinessLine_Subline"),col("W_ORG_DX_df1.X_IAM_FLG").alias("IAM_Client_Flag_IAM_Business"),col("W_ORG_DX_df1.X_INCORP_STATE_CD").alias("State_of_Incorporation"),col("W_ORG_DX_df1.X_INDRCT_RLSH_CNSULT_FLG").alias("Indirect_Relationship_Type_Consultant"),col("W_ORG_DX_df1.X_INDUAL_AUM").alias("Individual_Securities_as_a_percent_of_AUM"),col("W_ORG_DX_df1.X_INST_ACTIVITY_ROW_ID").alias("Last_Siebel_Activity_id"),col("W_ORG_DX_df1.X_INTERESTS_TEXT").alias("Reference_Comments"),col("W_ORG_DX_df1.X_INTL_AMER_BUSLINE_FLG").alias("INTL_Americas_Client_BusinessLine_Subline"),col("W_ORG_DX_df1.X_INTL_BUSLINE_FLG").alias("INTL_Client_BusinessLine_Subline"),col("W_ORG_DX_df1.X_INTL_EURO_BUSLINE_FLG").alias("INTL_Europe_Client_BusinessLine_Subline"),col("W_ORG_DX_df1.X_INV_DECISION_MAKING").alias("Investment_Decision_Making_Mode"),col("W_ORG_DX_df1.X_IPRMT_SCRE_VAL").alias("Promoter_Score_IAM_Business"),col("W_ORG_DX_df1.X_IRPS_BUSLINE_FLG").alias("IRPS_Client_BusinessLine_Subline"),col("W_ORG_DX_df1.X_KEY_ACCNT_FLG").alias("Key_Account_Flag"),col("W_ORG_DX_df1.X_KEY_ACCNT_SCORE").alias("Key_Account_Score"),col("W_ORG_DX_df1.X_KEY_ISSUES_FIRM").alias("Key_Issues_Facing_Firm"),col("W_ORG_DX_df1.X_KEY_NETWORKING_GROUP").alias("Key_Networking_Group"),col("W_ORG_DX_df1.X_LST_EML_DT_WID").alias("Company_Last_Email_Date"),col("W_ORG_DX_df1.X_LST_FAS_ACTIVITY_DT_WID").alias("FAS_Last_Activity_Date"),col("W_ORG_DX_df1.X_LST_INST_ACTIVITY_DT_WID").alias("Company_Inst_Last_Activity_Date_Wid"),col("W_ORG_DX_df1.X_LST_INST_ACTIVITY_TYPE").alias("Company_Last_Activity_Type"),col("W_ORG_DX_df1.X_LST_INST_CT_ACTIVITY_TYPE").alias("Company_Last_CT_Activity_Type"),col("W_ORG_DX_df1.X_LST_PH_DT_WID").alias("Company_Last_Call_Date_Wid"),col("W_ORG_DX_df1.X_LST_VST_DT_WID").alias("Company_Last_Visit_Date_Wid"),col("W_ORG_DX_df1.X_LST_INST_ACTIVITY_DT_WID").alias("Company_Last_Touch_Activity_Date_Wid"),col("W_ORG_DX_df1.X_MAIN_FAX_PH_NUM").alias("Main_Fax_Number"),col("W_ORG_DX_df1.X_MKT_CHANNEL").alias("Channels"),col("W_ORG_DX_df1.X_MUTUAL_AUM").alias("Mutual_Funds_Usage"),col("W_ORG_DX_df1.X_MUTUAL_AUM_CHG_NAME").alias("Mutual_Fund_Usage_Changed_By_Name"),col("W_ORG_DX_df1.X_MUTUAL_AUM_CHG_UID").alias("Mutual_Fund_Usage_Changed_By_Login"),col("W_ORG_DX_df1.X_NAICS_CD_DESC").alias("NAICS_Code_Description"),col("W_ORG_DX_df1.X_NCF").alias("Net_Cash_Flow_IAM_Business"),col("W_ORG_DX_df1.X_NON_PROFIT_ASSETS").alias("Non_Profit_Assets"),col("W_ORG_DX_df1.X_NON_QUALIFIED_ASSETS").alias("Non_Qualified_Assets"),col("W_ORG_DX_df1.X_NONPROFIT_ENTITY_TYPE").alias("IAM_Entity_Type_IAM_Business"),col("W_ORG_DX_df1.X_NPS_CORP_FLG").alias("Nonprofit_Corporate_Flag_Marketing_Business"),col("W_ORG_DX_df1.X_NUM_CLIENTS").alias("Number_of_Clients"),col("W_ORG_DX_df1.X_NUM_EMPLOYEES").alias("Total_Employees"),col("W_ORG_DX_df1.X_NUM_OF_REPS").alias("Number_of_Reps"),col("W_ORG_DX_df1.X_NUM_TAX_CLIENTS").alias("Number_of_Taxable_Clients"),col("W_ORG_DX_df1.X_NUM_TAX_EXMPT_CLIENTS").alias("Number_of_Tax_Exempt_Clients"),col("W_ORG_DX_df1.X_NUM_VISIT_WORK").alias("Number_Times_Used_as_Reference"),col("W_ORG_DX_df1.X_ORG_NAME_CHG_FROM").alias("Company_Name_Changed_From"),col("W_ORG_DX_df1.X_ORG_NAME_CHG_NAME").alias("Company_Name_Changed_By_Name"),col("W_ORG_DX_df1.X_ORG_NAME_CHG_UID").alias("Company_Name_Changed_By_UID"),col("W_ORG_DX_df1.X_ORG_RATING_COMMENTS").alias("Company_Rating_Comments_IAM_Business"),col("W_ORG_DX_df1.X_ORG_RATING_REASON_CD").alias("Company_Rating_Reason_IAM_Business"),col("W_ORG_DX_df1.X_OUTREACH_ACT_COUNT").alias("Number_of_Outreach_Roll13_Activities_IAM_Business"),col("W_ORG_DX_df1.X_PERC_DISCLOSED").alias("Percent_Disclosed"),col("W_ORG_DX_df1.X_PERC_DISCRET").alias("Percent_Discretionary"),col("W_ORG_DX_df1.X_PERC_NON_DISCLOSED").alias("Percent_Non_Disclosed"),col("W_ORG_DX_df1.X_PERC_NON_DISCRET").alias("Percent_Non_Discretionary"),col("W_ORG_DX_df1.X_PLATFORM_ARCH").alias("Platform_Architecture"),col("W_ORG_DX_df1.X_PLATFORM_ARCH_CHG_NAME").alias("Platform_Architecture_Changed_By_Name"),col("W_ORG_DX_df1.X_PLATFORM_ARCH_CHG_UID").alias("Platform_Architecture_Changed_By_Login"),col("W_ORG_DX_df1.X_POID_NUM").alias("POID"),col("W_ORG_DX_df1.X_PR_12_MTH_CSH_FLOW").alias("Prior_12_Month_Net_Cash_Flow"),col("W_ORG_DX_df1.X_PR_12_MTH_CSH_FLOW_CHG_NAME").alias("Prior_12_Month_Net_Cash_Flow_Changed_By_Name"),col("W_ORG_DX_df1.X_DCDBT_RE_WID"))
+
+col_from_joined_df2 = joined_df2.select(col("W_EMPLOYEE_D_df1.LOGIN").alias("DCDB_Sales_Executive_Owner_Login"),col("W_EMPLOYEE_D_df1.ROW_WID"))
+
+compl_join_df = col_from_joined_df.alias("new_col_from_joined_df").join(col_from_joined_df2.alias("new_col_from_joined_df2"), col("new_col_from_joined_df.X_DCDBT_RE_WID") == col("new_col_from_joined_df2.ROW_WID"), "left_outer")
+
+compl_from_joined_df = compl_join_df.select(col("Branch_Site"),col("DCDB_Sales_Executive_Owner_Login"))
+
+compl_from_joined_df.take(6)
+
+
+-- col_from_joined_df_nul = col_from_joined_df.withColumn("x4", lit('NULL'))
+-- col_from_joined_df_nul.take(6)
+
+
+Creating Table on Dataframe:
+W_ACTIVITY_F = sqlContext.read.format("com.databricks.spark.avro").load("hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/Repository/SiebelBI/W_ACTIVITY_F/datadate=20160406/")
+tab_df = sqlContext.registerDataFrameAsTable(W_ACTIVITY_F, "table1")
+df_res = sqlContext.sql("select count(*) from table1")
+
+Check if table is present:
+>>> "table1" in sqlContext.tableNames("db")
+True
+
+Show list of tables:
+sqlContext.tables().show()
+
+Print the schema:
+W_ACTIVITY_F.printSchema()
+
+dataframe back to rdd:
+rdd = tab_df.rdd
+
+rdd to dataframe
+
+rdd_to_df = rdd.toDF()
+
+
+--Read a text file and create and dataframe for rdd
+(http://www.nodalpoint.com/spark-data-frames-from-csv-files-handling-headers-column-types/)
+
+from pyspark.sql import SQLContext, Row
+from pyspark.sql import SQLContext
+from pyspark.sql.types import *
+sqlContext = SQLContext(sc)
+
+text_rdd = sc.textFile('hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/FAS_NPS/data/datadate=03212016/Medallia_Sales_Console_Export_TEST.csv')
+parts = text_rdd.map(lambda x: x.split(","))
+records_rdd = parts.map(lambda p: Row(siebel_contact_id=p[0],siebel_campaign_id=p[1],siebel_org_id=p[2],firm_name=p[3],invitation_date=p[4],response_date=p[5],expires_on_date=p[6],survey_status=p[7],survey_program=p[8],first_name=p[9],last_name=p[10],preferred_name=p[11],goes_by=p[12],email=p[13],frontline_crew_id=p[14],sales_exec_id=p[15],sales_exec=p[16],sales_exec_first_name=p[17],sales_exec_email=p[18],primer_sender_id=p[19],primer_sender=p[20],manager_id=p[21],sales_manager_id=p[22],sales_manager=p[23],follow_up_owner=p[24],follow_up_owner_first_name=p[25],follow_up_owner_email=p[26],detractor_follow_up_owner=p[27],detractor_follow_up_owner_first_name=p[28],detractor_follow_up_owner_email=p[29],channel=p[30],rapid=p[31],business_phone=p[32],title=p[33],business_unit=p[34],advisor_tier=p[35],advisor_subtier=p[36],firm_tier=p[37],firm_subtier=p[38],advisor_sales_region=p[39],sales_counterpart_id=p[40],sales_counter_part=p[41],sales_counterpart_first_name=p[42],sales_counter_part_email=p[43],internal_primer_sender_id=p[44],internal_primer_sender=p[45],conterpart_sales_manager_id=p[46],counterpart_sales_manager=p[47],aum=p[48],etf_aum=p[49],vetf=p[50],escalation_recepient=p[51],escalation_recipient_first_name=p[52],escalation_recipient_email=p[53],touchpoint_type=p[54],trade_status=p[55],io_exclusion_flag=p[56],manual_exclusion_flag=p[57],touchpoint_occurred_date=p[58],trade_mode=p[59],trade_type=p[60],underlying_client=p[61],frontline_crew=p[62],manager=p[63],team=p[64],sales_desk=p[65],touchpoint_logged_date=p[66],no_mktng_email_flag=p[67],no_bm_email_flag=p[68],no_dc_mktng_email_flag=p[69],do_not_call_flag=p[70],do_not_email_flag=p[71],touchpoint_notes=p[72],likelihood_to_recommend=p[73],why=p[74],what_can_vanguard_do_better=p[75],permission_to_followup=p[76],share_of_assets_invested_in_vanguard=p[77],touchpoint_impact=p[78],date_of_followup=p[79],key_takeaways=p[80],detailed_strengths=p[81],detailed_areas_of_opportunity=p[82],followups_we_have_committed_to=p[83],additional_action_items_for_considereation=p[84],nps_segment=p[85],interaction_id=p[86],touchpoint_timestamp=p[87],touchpoint_type_otg=p[88],current_status_of_alert=p[89],all_log_notes_combined=p[90],datadate=p[91]))
+
+rdd_to_df = sqlContext.createDataFrame(records_rdd)
+tab_df = sqlContext.registerDataFrameAsTable(rdd_to_df, "table1")
+res_df = sqlContext.sql("select distinct(firm_name) from table1 limit 4")
+res_df.collect()
+
+
+--- or
+
+from pyspark.sql import SQLContext
+from pyspark.sql.types import *
+sqlContext = SQLContext(sc)
+
+df = sc.textFile('hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/FAS_NPS/data/datadate=03212016/Medallia_Sales_Console_Export_TEST.csv')
+parts = df.map(lambda x: x.split(","))
+records_df = parts.map(lambda X: (X[1], X[2], X[3], X[4], X[5], X[6], X[7], X[8], X[9], X[10], X[11], X[12], X[13], X[14], X[15], X[16], X[17], X[18], X[19], X[20], X[21], X[22], X[23], X[24], X[25], X[26], X[27], X[28], X[29],X[30],X[31],X[32],X[33],X[34],X[35],X[36],X[37],X[38],X[39],X[40],X[41],X[42],X[43],X[44],X[45],X[46],X[47],X[48],X[49],X[50],X[51],X[52],X[53],X[54],X[55],X[56],X[57],X[58],X[59],X[60],X[61],X[62],X[63],X[64],X[65],X[66],X[67],X[68],X[69],X[70],X[71],X[72],X[73],X[74],X[75],X[76],X[77],X[78],X[79],X[80],X[81],X[82],X[83],X[84],X[85],X[86],X[87],X[88],X[89],X[90],X[91],X[92].strip()))
+schemaString = "siebel_contact_id,siebel_campaign_id,siebel_org_id,firm_name,invitation_date,response_date,expires_on_date,survey_status,survey_program,first_name,last_name,preferred_name,goes_by,email,frontline_crew_id,sales_exec_id,sales_exec,sales_exec_first_name,sales_exec_email,primer_sender_id,primer_sender,manager_id,sales_manager_id,sales_manager,follow_up_owner,follow_up_owner_first_name,follow_up_owner_email,detractor_follow_up_owner,detractor_follow_up_owner_first_name,detractor_follow_up_owner_email,channel,rapid,business_phone,title,business_unit,advisor_tier,advisor_subtier,firm_tier,firm_subtier,advisor_sales_region,sales_counterpart_id,sales_counter_part,sales_counterpart_first_name,sales_counter_part_email,internal_primer_sender_id,internal_primer_sender string,conterpart_sales_manager_id,counterpart_sales_manager,aum,etf_aum,vetf,escalation_recepient,escalation_recipient_first_name,escalation_recipient_email,touchpoint_type,trade_status,io_exclusion_flag,manual_exclusion_flag,touchpoint_occurred_date,trade_mode,trade_type,underlying_client,frontline_crew,manager,team,sales_desk,touchpoint_logged_date,no_mktng_email_flag,no_bm_email_flag,no_dc_mktng_email_flag,do_not_call_flag,do_not_email_flag,touchpoint_notes,likelihood_to_recommend,why,what_can_vanguard_do_better,permission_to_followup,share_of_assets_invested_in_vanguard,touchpoint_impact,date_of_followup,key_takeaways,detailed_strengths,detailed_areas_of_opportunity,followups_we_have_committed_to,additional_action_items_for_considereation,nps_segment,interaction_id,touchpoint_timestamp,touchpoint_type_otg,current_status_of_alert,all_log_notes_combined,datadate"
+fields = [StructField(field_name, StringType(), True) for field_name in schemaString.split(",")]
+schema = StructType(fields)
+table_df = sqlContext.createDataFrame(df, schema)
+
+
+
+Spark jdbc connection ( oracle / siebel)
+
+Adding drivers:
+
+pyspark --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/ojdbc6.jar --driver-class-path /data/hadoop/work/dmr/ojdbc6.jar --jars /data/hadoop/work/dmr/ojdbc6.jar
+
+or : (Using --jars (comma separated) and --driver-class-path (colon separated) is working.)
+
+
+pyspark --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/db2jcc.jar,/data/hadoop/work/dmr/db2jcc_license_cu.jar,/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar --driver-class-path /data/hadoop/work/dmr/ojdbc6.jar:/data/hadoop/work/dmr/db2jcc.jar:/data/hadoop/work/dmr/db2jcc_license_cu.jar:/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar:/data/hadoop/work/dmr/jars/db2jcc4.jar --jars /data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/db2jcc.jar,/data/hadoop/work/dmr/db2jcc_license_cu.jar,/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar
+
+#######################
+
+### Spark < 1.6.0
+df1 = sqlContext.read.format('jdbc').options(url='jdbc:oracle:thin:adfm21q/D6eap32r@ldap://oidprd60:3060/vcisat50_report,cn=OracleContext,dc=vanguard,dc=com', dbtable="(select distinct TRIM(S_ASSET5.ASSET_NUM) VGI_Plan_MA,S_ASSET5.X_PLAN_NAME Plan_Name,S_ORG_EXT.NAME Company_Name,S_ASSET5.TYPE_CD Business_Line_Sub_Line,S_ASSET5.X_BUS_LINE_CD Business_Line_Ind,S_ASSET5.X_SUB_LINE_CD Business_Sub_Line,S_ASSET5.SUB_TYPE_CD ,S_ASSET5.PNSN_SUBTYPE_CD Sub_Type,S_FN_ACCNT3_FNX.ATTRIB_04 Oper_Service_Segment,S_ASSET5.CFG_TYPE_CD Intl_Market_Segment,S_ASSET5.STATUS_CD Status,S_CONTACT.FST_NAME RM_First_Name,S_CONTACT.LAST_NAME RM_Last_Name,TRIM(S_CONTACT.FST_NAME) || ' ' || TRIM(S_CONTACT.LAST_NAME) as Primary_Coverage_Team_Member,S_ORG_EXT_X.ATTRIB_42 FIRM_ID,S_ORG_EXT_X.ATTRIB_39 CRD_Number FROM SIEBEL.S_ASSET S_ASSET5 INNER JOIN  SIEBEL.S_ASSET_POSTN ON (S_ASSET_POSTN.ASSET_ID=S_ASSET5.ROW_ID) INNER JOIN SIEBEL.S_POSTN ON (S_POSTN.ROW_ID=S_ASSET_POSTN.POSITION_ID) LEFT OUTER JOIN SIEBEL.S_CONTACT ON (S_POSTN.PR_EMP_ID = S_CONTACT.ROW_ID and S_CONTACT.PRIV_FLG = 'N') LEFT OUTER JOIN SIEBEL.S_FN_ACCNT3_FNX on (S_ASSET5.ROW_ID=S_FN_ACCNT3_FNX.PAR_ROW_ID) LEFT OUTER JOIN SIEBEL.S_ORG_EXT on (S_ORG_EXT.ROW_ID=S_ASSET5.OWNER_ACCNT_ID) LEFT OUTER JOIN SIEBEL.S_ORG_EXT_X on (S_ORG_EXT.ROW_ID=S_ORG_EXT_X.ROW_ID) where (TRIM(S_ASSET5.ASSET_NUM) between '10000' and '18999' or TRIM(S_ASSET5.ASSET_NUM) between '45000' and '46999' or TRIM(S_ASSET5.ASSET_NUM) between '50000' and '55554' or TRIM(S_ASSET5.ASSET_NUM) like 'J%' or TRIM(S_ASSET5.ASSET_NUM) like 'XA%' or TRIM(S_ASSET5.ASSET_NUM) like 'XB%') AND (TRIM(S_CONTACT.FST_NAME) || ' ' || TRIM(S_CONTACT.LAST_NAME) ) not  in ('Guest Guest' , 'AIBG10P AIBG10P' , 'EAI Administrator' , 'Aeilp Support' , 'RM EAI Desktop' ,'International Autonomy') ORDER BY VGI_Plan_MA)abc").load()
+
+### Spark >= 1.6.0 ( should add: driver="oracle.jdbc.OracleDriver" at load statment)
+df1 = sqlContext.read.format('jdbc').options(url='jdbc:oracle:thin:adfm21q/D6eap32r@ldap://oidprd60:3060/vcisat50_report,cn=OracleContext,dc=vanguard,dc=com', dbtable="(select distinct TRIM(S_ASSET5.ASSET_NUM) VGI_Plan_MA,S_ASSET5.X_PLAN_NAME Plan_Name,S_ORG_EXT.NAME Company_Name,S_ASSET5.TYPE_CD Business_Line_Sub_Line,S_ASSET5.X_BUS_LINE_CD Business_Line_Ind,S_ASSET5.X_SUB_LINE_CD Business_Sub_Line,S_ASSET5.SUB_TYPE_CD ,S_ASSET5.PNSN_SUBTYPE_CD Sub_Type,S_FN_ACCNT3_FNX.ATTRIB_04 Oper_Service_Segment,S_ASSET5.CFG_TYPE_CD Intl_Market_Segment,S_ASSET5.STATUS_CD Status,S_CONTACT.FST_NAME RM_First_Name,S_CONTACT.LAST_NAME RM_Last_Name,TRIM(S_CONTACT.FST_NAME) || ' ' || TRIM(S_CONTACT.LAST_NAME) as Primary_Coverage_Team_Member,S_ORG_EXT_X.ATTRIB_42 FIRM_ID,S_ORG_EXT_X.ATTRIB_39 CRD_Number FROM SIEBEL.S_ASSET S_ASSET5 INNER JOIN  SIEBEL.S_ASSET_POSTN ON (S_ASSET_POSTN.ASSET_ID=S_ASSET5.ROW_ID) INNER JOIN SIEBEL.S_POSTN ON (S_POSTN.ROW_ID=S_ASSET_POSTN.POSITION_ID) LEFT OUTER JOIN SIEBEL.S_CONTACT ON (S_POSTN.PR_EMP_ID = S_CONTACT.ROW_ID and S_CONTACT.PRIV_FLG = 'N') LEFT OUTER JOIN SIEBEL.S_FN_ACCNT3_FNX on (S_ASSET5.ROW_ID=S_FN_ACCNT3_FNX.PAR_ROW_ID) LEFT OUTER JOIN SIEBEL.S_ORG_EXT on (S_ORG_EXT.ROW_ID=S_ASSET5.OWNER_ACCNT_ID) LEFT OUTER JOIN SIEBEL.S_ORG_EXT_X on (S_ORG_EXT.ROW_ID=S_ORG_EXT_X.ROW_ID) where (TRIM(S_ASSET5.ASSET_NUM) between '10000' and '18999' or TRIM(S_ASSET5.ASSET_NUM) between '45000' and '46999' or TRIM(S_ASSET5.ASSET_NUM) between '50000' and '55554' or TRIM(S_ASSET5.ASSET_NUM) like 'J%' or TRIM(S_ASSET5.ASSET_NUM) like 'XA%' or TRIM(S_ASSET5.ASSET_NUM) like 'XB%') AND (TRIM(S_CONTACT.FST_NAME) || ' ' || TRIM(S_CONTACT.LAST_NAME) ) not  in ('Guest Guest' , 'AIBG10P AIBG10P' , 'EAI Administrator' , 'Aeilp Support' , 'RM EAI Desktop' ,'International Autonomy') ORDER BY VGI_Plan_MA)abc",driver="oracle.jdbc.OracleDriver").load()
+
+#######################
+
+from pyspark import SQLContext
+sqlContext = SQLContext(sc)
+df = sqlContext.read.format('jdbc').options(url='jdbc:oracle:thin:adfm21q/q2ckY3cw@ldap://oidprd60:3060/vcisat60_all,cn=OracleContext,dc=vanguard,dc=com', dbtable='SIEBEL.W_ACTIVITY_F').load()
+(or)
+df = sqlContext.read.format('jdbc').options(url='jdbc:oracle:thin:adfm21q/q2ckY3cw@ldap://oidprd60:3060/vcisat60_all,cn=OracleContext,dc=vanguard,dc=com', dbtable='(select * from SIEBEL.W_ACTIVITY_F where rownum < 10)abc').load()
+
+tab_df = sqlContext.registerDataFrameAsTable(df, "table1")
+res_df = sqlContext.sql("select count(*) from table1")
+res_df.collect()
+
+( oracle / DS_Informart_CAT_ORCL/ GENADM)
+
+pyspark --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/ojdbc6.jar --driver-class-path /data/hadoop/work/dmr/ojdbc6.jar --jars /data/hadoop/work/dmr/ojdbc6.jar
+
+from pyspark import SQLContext
+sqlContext = SQLContext(sc)
+df2 = sqlContext.read.format('jdbc').options(url='jdbc:oracle:thin:adfmq/dfmcat00@ldap://oidprd40:3060/ecrcat45_all,cn=OracleContext,dc=vanguard,dc=com', dbtable='GENADM.AG2_AGENT_QRTR').load()
+
+(or)
+df2 = sqlContext.read.format('jdbc').options(url='jdbc:oracle:thin:adfmq/dfmcat00@ldap://oidprd40:3060/ecrcat45_all,cn=OracleContext,dc=vanguard,dc=com', dbtable='(SELECT * FROM GENADM.AG2_AGENT_QRTR WHERE INTERACTION_TYPE_KEY > 2)ABC').load()
+
+tab_df2 = sqlContext.registerDataFrameAsTable(df2, "table2")
+res_df2 = sqlContext.sql("select count(*) from table2")
+res_df2.collect()
+
+
+Spark jdbc connection ( DB2)
+
+pyspark --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar --driver-class-path /data/hadoop/work/dmr/ojdbc6.jar:/data/hadoop/work/dmr/jars/db2jcc4.jar --jars /data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar
+from pyspark import SQLContext
+sqlContext = SQLContext(sc)
+-- df = sqlContext.read.format('jdbc').options(url='jdbc:db2://db2cdq0r:5032/VGIDQ0G', user='ADFM22Q', password='dfm98cat', dbtable='AVGI00.VMNTRY_INSTRN', driver='com.ibm.db2.jcc.DB2Driver').load()
+-- df = sqlContext.read.format('jdbc').options(url='jdbc:db2://db2cdq0r:5032/VGIDQ0G', user='ADFM22Q', password='dfm98cat', dbtable='AVGI00.VMNTRY_INSTRN').load()
+-- df = sqlContext.read.format('jdbc').options(url='jdbc:db2://db2cdq0r:5032/VGIDQ0G', user='ADFM22Q', password='dfm98cat', dbtable="(select * from AVGI00.VMNTRY_INSTRN where DB_PRENOTE_VALD_FL = 'N' and MNTRY_INSTRN_ID > 10000000)abc").load()
+df = sqlContext.read.format('jdbc').options(url='jdbc:db2://db2cdq0r:5032/VGIDQ0G', queryAcceleration='ALL', user='ADFM22Q', password='dfm98cat', dbtable="(select count(*) from AVGI00.VMNTRY_INSTRN where DB_PRENOTE_VALD_FL = 'N' and MNTRY_INSTRN_ID > 10000000)abc").load()
+tab_df = sqlContext.registerDataFrameAsTable(df, "table1")
+res_df = sqlContext.sql("select count(*) from table1")
+res_df.collect()
+
+Spark JDBC Connection ( oracle ) DS_SIEBEL_ORCL_CAT
+
+pyspark --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar --driver-class-path /data/hadoop/work/dmr/ojdbc6.jar:/data/hadoop/work/dmr/jars/db2jcc4.jar --jars /data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar
+from pyspark import SQLContext
+sqlContext = SQLContext(sc)
+df = sqlContext.read.format('jdbc').options(url='jdbc:oracle:thin:adfm21q/dfmq0909@ldap://oidprd60:3060/vcicat50_report,cn=OracleContext,dc=vanguard,dc=com', dbtable="(select distinct TRIM(S_ASSET5.ASSET_NUM) VGI_Plan_MA,S_ASSET5.X_PLAN_NAME Plan_Name,S_ORG_EXT.NAME Company_Name,S_ASSET5.TYPE_CD Business_Line_Sub_Line,S_ASSET5.X_BUS_LINE_CD Business_Line_Ind,S_ASSET5.X_SUB_LINE_CD Business_Sub_Line,S_ASSET5.SUB_TYPE_CD ,S_ASSET5.PNSN_SUBTYPE_CD Sub_Type,S_FN_ACCNT3_FNX.ATTRIB_04 Oper_Service_Segment,S_ASSET5.CFG_TYPE_CD Intl_Market_Segment,S_ASSET5.STATUS_CD Status,S_CONTACT.FST_NAME RM_First_Name,S_CONTACT.LAST_NAME RM_Last_Name,TRIM(S_CONTACT.FST_NAME) || ' ' || TRIM(S_CONTACT.LAST_NAME) as Primary_Coverage_Team_Member,S_ORG_EXT_X.ATTRIB_42 FIRM_ID,S_ORG_EXT_X.ATTRIB_39 CRD_Number FROM SIEBEL.S_ASSET5 INNER JOIN  SIEBEL.S_ASSET_POSTN ON (S_ASSET_POSTN.ASSET_ID=S_ASSET5.ROW_ID) INNER JOIN SIEBEL.S_POSTN ON (S_POSTN.ROW_ID=S_ASSET_POSTN.POSITION_ID) LEFT OUTER JOIN SIEBEL.S_CONTACT ON (S_POSTN.PR_EMP_ID = S_CONTACT.ROW_ID and S_CONTACT.PRIV_FLG = 'N') LEFT OUTER JOIN SIEBEL.S_FN_ACCNT3_FNX on (S_ASSET5.ROW_ID=S_FN_ACCNT3_FNX.PAR_ROW_ID) LEFT OUTER JOIN SIEBEL.S_ORG_EXT on (S_ORG_EXT.ROW_ID=S_ASSET5.OWNER_ACCNT_ID) LEFT OUTER JOIN SIEBEL.S_ORG_EXT_X on (S_ORG_EXT.ROW_ID=S_ORG_EXT_X.ROW_ID) where (VGI_Plan_MA between '10000' and '18999' or VGI_Plan_MA between '45000' and '46999' or VGI_Plan_MA between '50000' and '55554' or VGI_Plan_MA like 'J%' or VGI_Plan_MA like 'XA%' or VGI_Plan_MA like 'XB%') AND Primary_Coverage_Team_Member not  in ('Guest Guest' , 'AIBG10P AIBG10P' , 'EAI Administrator' , 'Aeilp Support' , 'RM EAI Desktop' ,'International Autonomy') ORDER BY VGI_Plan_MA)abc").load()
+
+
+Spark with netezza:
+https://github.com/SparkTC/spark-netezza
+
+
+Postgresql:
+
+df = sqlContext.read.format("jdbc").options(url="jdbc:postgresql://ip_address:port/db_name?user=myuser&password=mypasswd", dbtable="table_name",driver="org.postgresql.Driver").load()
+df.count()
+
+
+pyspark --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/db2jcc.jar --driver-class-path /data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/db2jcc.jar --jars /data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/db2jcc.jar
+
+
+Join of two tables from (SIEBEL) and (GENADM)
+
+from pyspark import SQLContext
+sqlContext = SQLContext(sc)
+df1 = sqlContext.read.format('jdbc').options(url='jdbc:oracle:thin:adfm21q/q2ckY3cw@ldap://oidprd60:3060/vcisat60_all,cn=OracleContext,dc=vanguard,dc=com', dbtable='(select * from SIEBEL.W_EMPLOYEE_D INNER JOIN SIEBEL.WC_EMPLOYEE_DX ON W_EMPLOYEE_D.ROW_WID = WC_EMPLOYEE_DX.ROW_WID)abc').load()
+df2 = sqlContext.read.format('jdbc').options(url='jdbc:oracle:thin:adfmq/dfmcat00@ldap://oidprd40:3060/ecrcat45_all,cn=OracleContext,dc=vanguard,dc=com', dbtable='(SELECT * FROM GENADM.RESOURCE_)bcd').load()
+tab_df1 = sqlContext.registerDataFrameAsTable(df1, "table1")
+tab_df2 = sqlContext.registerDataFrameAsTable(df2, "table2")
+res_df = sqlContext.sql("select count(*) from table1 inner join table2 on table1.LAST_NAME = table2.AGENT_LAST_NAME")
+
+
+
+Inserting data from spark to hive tables:
+
+create EXTERNAL TABLE spark_table(MASTER_ACCOUNT_NUMBER STRING, ACCOUNT_TYPE STRING, FUND_CUSIP_NO STRING, DOLLAR_AMOUNT_GROSS STRING, FIRM_CUSTOMER_ACCOUNT_NUMBER STRING, MATRIX_LEVEL STRING, TRADE_DATE_TS STRING, MATRIX_LEVEL_TO STRING, MEMBERSHIP_ID STRING, MEMBERSHIP_ID_TO STRING, NSCC_CL_ID STRING, TRNSFR_TYP_CD STRING, ACCT_NO_FND_RCV STRING, ACCT_NO_FND_DLV STRING, VGI_FND_ID STRING, SHARE_QUANTITY STRING, GIFT_INDICATOR STRING, DLV_FIRM_NO STRING, RCV_FIRM_NO STRING, SETTLEMENT_DATE STRING, SETTLMT_DT STRING, SHARE_PRICE_AMOUNT STRING, TRANSACTION_CODE STRING, TIN_UNDERLYING_PRIMARY_CLIENT STRING, VAST_POSTED_FLAG STRING, VAST_SHELL_ACCOUNT_ID STRING, PROCESS_DATE STRING, TRADE_DATE STRING, VGI_PLAN_MA STRING, PLAN_NAME STRING, COMPANY_NAME STRING, BUSINESS_LINE_SUB_LINE STRING, BUSINESS_LINE_IND STRING, BUSINESS_SUB_LINE STRING, SUB_TYPE_CD STRING, SUB_TYPE STRING, OPER_SERVICE_SEGMENT STRING, INTL_MARKET_SEGMENT STRING, STATUS STRING, RM_FIRST_NAME STRING, RM_LAST_NAME STRING, PRIMARY_COVERAGE_TEAM_MEMBER STRING, FIRM_ID STRING, CRD_NUMBER STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n';
+
+pyspark --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/db2jcc.jar,/data/hadoop/work/dmr/db2jcc_license_cu.jar,/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar --driver-class-path /data/hadoop/work/dmr/ojdbc6.jar:/data/hadoop/work/dmr/db2jcc.jar:/data/hadoop/work/dmr/db2jcc_license_cu.jar:/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar:/data/hadoop/work/dmr/jars/db2jcc4.jar --jars /data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/db2jcc.jar,/data/hadoop/work/dmr/db2jcc_license_cu.jar,/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar
+
+from pyspark import HiveContext
+sqlContext = HiveContext(sc)
+
+df1 = sqlContext.read.format('jdbc').options(url='jdbc:oracle:thin:adfm21q/D6eap32r@ldap://oidprd60:3060/vcisat50_report,cn=OracleContext,dc=vanguard,dc=com', dbtable="(select distinct TRIM(S_ASSET5.ASSET_NUM) VGI_Plan_MA,S_ASSET5.X_PLAN_NAME Plan_Name,S_ORG_EXT.NAME Company_Name,S_ASSET5.TYPE_CD Business_Line_Sub_Line,S_ASSET5.X_BUS_LINE_CD Business_Line_Ind,S_ASSET5.X_SUB_LINE_CD Business_Sub_Line,S_ASSET5.SUB_TYPE_CD ,S_ASSET5.PNSN_SUBTYPE_CD Sub_Type,S_FN_ACCNT3_FNX.ATTRIB_04 Oper_Service_Segment,S_ASSET5.CFG_TYPE_CD Intl_Market_Segment,S_ASSET5.STATUS_CD Status,S_CONTACT.FST_NAME RM_First_Name,S_CONTACT.LAST_NAME RM_Last_Name,TRIM(S_CONTACT.FST_NAME) || ' ' || TRIM(S_CONTACT.LAST_NAME) as Primary_Coverage_Team_Member,S_ORG_EXT_X.ATTRIB_42 FIRM_ID,S_ORG_EXT_X.ATTRIB_39 CRD_Number FROM SIEBEL.S_ASSET S_ASSET5 INNER JOIN  SIEBEL.S_ASSET_POSTN ON (S_ASSET_POSTN.ASSET_ID=S_ASSET5.ROW_ID) INNER JOIN SIEBEL.S_POSTN ON (S_POSTN.ROW_ID=S_ASSET_POSTN.POSITION_ID) LEFT OUTER JOIN SIEBEL.S_CONTACT ON (S_POSTN.PR_EMP_ID = S_CONTACT.ROW_ID and S_CONTACT.PRIV_FLG = 'N') LEFT OUTER JOIN SIEBEL.S_FN_ACCNT3_FNX on (S_ASSET5.ROW_ID=S_FN_ACCNT3_FNX.PAR_ROW_ID) LEFT OUTER JOIN SIEBEL.S_ORG_EXT on (S_ORG_EXT.ROW_ID=S_ASSET5.OWNER_ACCNT_ID) LEFT OUTER JOIN SIEBEL.S_ORG_EXT_X on (S_ORG_EXT.ROW_ID=S_ORG_EXT_X.ROW_ID) where (TRIM(S_ASSET5.ASSET_NUM) between '10000' and '18999' or TRIM(S_ASSET5.ASSET_NUM) between '45000' and '46999' or TRIM(S_ASSET5.ASSET_NUM) between '50000' and '55554' or TRIM(S_ASSET5.ASSET_NUM) like 'J%' or TRIM(S_ASSET5.ASSET_NUM) like 'XA%' or TRIM(S_ASSET5.ASSET_NUM) like 'XB%') AND (TRIM(S_CONTACT.FST_NAME) || ' ' || TRIM(S_CONTACT.LAST_NAME) ) not  in ('Guest Guest' , 'AIBG10P AIBG10P' , 'EAI Administrator' , 'Aeilp Support' , 'RM EAI Desktop' ,'International Autonomy') ORDER BY VGI_Plan_MA)abc").load()
+
+df2 = sqlContext.read.format('jdbc').options(url='jdbc:db2://db2cdq0r:5032/VGIDQ0G', queryAcceleration='ALL', user='ADFM22Q', password='dfm98cat', dbtable="(Select maFrom.PLN_NO Master_Account_Number,vTACATS_XFR_TXN.ACCT_TYP_CD Account_Type,vTACATS_XFR_TXN.CUSIP_NO Fund_CUSIP_NO,vTACATS_XFR_TXN.TRNSFR_MONEY_AM Dollar_Amount_Gross,vTACATS_XFR_TXN.ACCT_NO_FIRM_DLV Firm_Customer_Account_Number,vTACATS_XFR_TXN.NTWK_CL_IND_DLV Matrix_Level,vTACATS_XFR_TXN.TRD_DT Trade_Date_TS,vTACATS_XFR_TXN.NTWK_CL_IND Matrix_Level_TO,vTACATS_XFR_TXN.DLV_FIRM_MBRSHP_ID Membership_ID,vTACATS_XFR_TXN.RCV_FIRM_MBRSHP_ID Membership_ID_TO,vTACATS_XFR_TXN.NSCC_CL_ID,vTACATS_XFR_TXN.TRNSFR_TYP_CD,vTACATS_XFR_TXN.ACCT_NO_FND_RCV,vTACATS_XFR_TXN.ACCT_NO_FND_DLV,vTACATS_XFR_TXN.VGI_FND_ID,vTACATS_XFR_TXN.TRNSFR_SHR_QY Share_Quantity,vTACATS_XFR_TXN.GIFT_DONATION_IND Gift_Indicator,vTACATS_XFR_TXN.DLV_FIRM_NO,vTACATS_XFR_TXN.RCV_FIRM_NO,substr( digits(year(vTACATS_XFR_TXN.SETTLMT_DT)),7)||substr( digits(month(vTACATS_XFR_TXN.SETTLMT_DT)),9)||substr( digits(day(vTACATS_XFR_TXN.SETTLMT_DT)),9) Settlement_Date,vTACATS_XFR_TXN.SETTLMT_DT,vTACATS_XFR_TXN.TRNSFR_SHR_PRC Share_Price_Amount,vTACATS_XFR_TXN.TRNS_DEST_TYP_CD Transaction_Code,vTACATS_XFR_TXN.PRIMY_CUST_SSN_EIN TIN_Underlying_Primary_Client,vTACATS_XFR_TXN.VAST_POSTG_FL VAST_Posted_Flag,vTACATS_XFR_TXN.VAST_SHELL_ACCT_ID VAST_Shell_Account_ID,substr( digits(year(vTACATS_XFR_TXN.VAST_PROCS_DT)),7)||substr( digits(month(vTACATS_XFR_TXN.VAST_PROCS_DT)),9)||substr( digits(day(vTACATS_XFR_TXN.VAST_PROCS_DT)),9) Process_Date,substr( digits(year(vTACATS_XFR_TXN.TRD_DT )),7)||substr( digits(month(vTACATS_XFR_TXN.TRD_DT )),9)||substr( digits(day(vTACATS_XFR_TXN.TRD_DT )),9) Trade_Date FROM AVGI00.VACATS_XFR_TXN vTACATS_XFR_TXN LEFT OUTER JOIN AVGI00.VFSSTRN1 vTRGSTRN ON vTACATS_XFR_TXN.NSCC_CL_ID = vTRGSTRN.NSCC_CL_ID LEFT OUTER JOIN AVGI00.VACATS_ORIGXFR_TXN TACATS_ORIGXFR_TXN ON TACATS_ORIGXFR_TXN.NSCC_CL_ID = vTACATS_XFR_TXN.NSCC_CL_ID LEFT OUTER JOIN AVGI00.VACATS_XFRTXN_CMNT TACATS_XFRTXN_CMNT ON TACATS_XFRTXN_CMNT.NSCC_CL_ID = vTACATS_XFR_TXN.NSCC_CL_ID LEFT OUTER JOIN AVGI00.VFSTXUP1 TTXN_UPDT_HIST ON TTXN_UPDT_HIST.NSCC_CL_ID= vTACATS_XFR_TXN.NSCC_CL_ID LEFT OUTER JOIN AVGI00.VFSOSTA1 TORD_STATUS_AVT ON TTXN_UPDT_HIST.ORD_STATUS_CD=TORD_STATUS_AVT.ORD_STATUS_CD LEFT OUTER JOIN AVGI00.VPO_NSCC_ID TPON ON TPON.NSCC_ID = vTACATS_XFR_TXN.DLV_FIRM_NO LEFT OUTER JOIN AVGI00.VCIN0220 T022 ON TPON.PO_ID = T022.VGI_CLNT_ID LEFT OUTER JOIN AVGI00.VPO_NSCC_ID TPON2 ON TPON2.NSCC_ID = vTACATS_XFR_TXN.RCV_FIRM_NO LEFT OUTER JOIN AVGI00.VCIN0220 T022b ON  TPON2.PO_ID = T022b.VGI_CLNT_ID LEFT OUTER JOIN AVGI00.VPO_NSCC_ID TPON3 ON TPON3.NSCC_ID = vTRGSTRN.TPA_NO LEFT OUTER JOIN AVGI00.VCIN0220 T022c ON TPON3.PO_ID= T022c.VGI_CLNT_ID LEFT OUTER JOIN AVGI00.VFSOTXA1 VFSOTXA1 ON VFSOTXA1.TXN_CD in ( '10','11','13') AND VFSOTXA1.TXN_CD = (CASE WHEN vTACATS_XFR_TXN.TRNSFR_TYP_CD = '1' THEN '10' WHEN vTACATS_XFR_TXN.TRNSFR_TYP_CD = '2' THEN '11' WHEN vTACATS_XFR_TXN.TRNSFR_TYP_CD = '3' THEN '13' ELSE null END) LEFT OUTER JOIN (SELECT i_vTSAG_IIG.PLN_NO, i_vTMUTL_FND.VAST_ACCT_NO, i_vTMUTL_FND.PORT_ID, i_vTSAG.SAG_ID, i_vTSAG.SERV_ID, i_vTSAG_IIG.AGRMT_NM, i_vTMUTL_FND.ACCT_ID, i_vTMUTL_FND.ACCT_POSN_ID FROM AVGI00.VSAG_ACCT_RLSHP i_vTSAG_ACCT INNER JOIN AVGI00.VSAG i_vTSAG ON i_vTSAG_ACCT.SAG_ID = i_vTSAG.SAG_ID AND i_vTSAG.SERV_ID = 65 INNER JOIN AVGI00.VSAG_IIG i_vTSAG_IIG ON i_vTSAG.SAG_ID = i_vTSAG_IIG.SAG_ID INNER JOIN AVGI00.VMUTL_FND_POSN i_vTMUTL_FND ON i_vTMUTL_FND.ACCT_ID = i_vTSAG_ACCT.RLSHP_ID) maFrom on maFrom.VAST_ACCT_NO = vTACATS_XFR_TXN.ACCT_NO_FND_DLV and  maFrom.PORT_ID = vTACATS_XFR_TXN.VGI_FND_ID LEFT OUTER JOIN (SELECT i_vTSAG_IIG1.PLN_NO, i_vTMUTL_FND1.VAST_ACCT_NO, i_vTMUTL_FND1.PORT_ID, i_vTSAG1.SAG_ID, i_vTSAG1.SERV_ID, i_vTSAG_IIG1.AGRMT_NM, (i_vTMUTL_FND1.BOOK_SHR_QY + i_vTMUTL_FND1.ISS_SHR_QY) Share_Balance_To, i_vTMUTL_FND1.ACCT_ID, i_vTMUTL_FND1.ACCT_POSN_ID  FROM AVGI00.VSAG_ACCT_RLSHP i_vTSAG_ACCT1 INNER JOIN AVGI00.VSAG i_vTSAG1 ON i_vTSAG_ACCT1.SAG_ID = i_vTSAG1.SAG_ID AND i_vTSAG1.SERV_ID = 65 INNER JOIN AVGI00.VSAG_IIG i_vTSAG_IIG1 ON  i_vTSAG1.SAG_ID = i_vTSAG_IIG1.SAG_ID INNER JOIN AVGI00.VMUTL_FND_POSN i_vTMUTL_FND1 ON  i_vTMUTL_FND1.ACCT_ID = i_vTSAG_ACCT1.RLSHP_ID) maTo on maTo.VAST_ACCT_NO = vTACATS_XFR_TXN.ACCT_NO_FND_RCV and maTo.PORT_ID = vTACATS_XFR_TXN.VGI_FND_ID left outer join (SELECT distinct vTCIN091.PO_ID,vTCIN091.USER_ID as Crew_User_IDH,vTCIN091.FRST_NM as Crew_First_NameH,vTCIN091.LST_NM as Crew_Last_NameH, vTCIN088.VGI_ORG_NM as Crew_Department_NameH,vTPSO_JOB.NM as Crew_Job_TitleH,vTCIN091Mngr.FRST_NM as Crew_Supervisor_First_NameH,vTCIN091Mngr.LST_NM as Crew_Supervisor_Last_NameH,cast(vTCIN091.VGI_ORG_ID as CHAR(4)) as VGI_ORG_IDH FROM AVGI00.VCIN0910 vTCIN091 INNER join AVGI00.VCIN0880 vTCIN088 on vTCIN091.VGI_ORG_ID = vTCIN088.VGI_ORG_ID INNER join AVGI00.VVGI_PERS vTVGI_PERS ON vTCIN091.PO_ID = vTVGI_PERS.CREW_PO_ID INNER JOIN AVGI00.VPSO_JOB vTPSO_JOB ON vTVGI_PERS.PSO_JOB_CD = vTPSO_JOB.PSO_JOB_CD INNER join AVGI00.VPO_RLSHP vTPO_RLSHP ON vTVGI_PERS.CREW_PO_ID=vTPO_RLSHP.PO_ID and vTPO_RLSHP.PO_RLSHP_CD = 'SUPV' INNER join AVGI00.VCIN0910 vTCIN091Mngr ON vTPO_RLSHP.RLTD_PO_ID=vTCIN091Mngr.PO_ID WHERE vTCIN091.VGI_ORG_ID  in (0614, 0624, 0706, 0707) and vTCIN091.USER_ID like 'U%' and vTCIN091Mngr.VGI_ORG_ID in (0614, 0624, 0706, 0707) and vTCIN091Mngr.USER_ID like 'U%') crewHist ON  TTXN_UPDT_HIST.MODFN_USER_ID=crewHist.Crew_User_IDH left outer join (SELECT distinct vTCIN091.PO_ID,vTCIN091.USER_ID as Crew_User_IDC,vTCIN091.FRST_NM as Crew_First_NameC,vTCIN091.LST_NM as Crew_Last_NameC,vTCIN088.VGI_ORG_NM as Crew_Department_NameC,vTPSO_JOB.NM as Crew_Job_TitleC,vTCIN091Mngr.FRST_NM as Crew_Supervisor_First_NameC,vTCIN091Mngr.LST_NM as Crew_Supervisor_Last_NameC,cast(vTCIN091.VGI_ORG_ID as CHAR(4)) as VGI_ORG_IDC FROM AVGI00.VCIN0910 vTCIN091 INNER join AVGI00.VCIN0880 vTCIN088 on vTCIN091.VGI_ORG_ID = vTCIN088.VGI_ORG_ID INNER join AVGI00.VVGI_PERS vTVGI_PERS ON vTCIN091.PO_ID = vTVGI_PERS.CREW_PO_ID INNER JOIN AVGI00.VPSO_JOB vTPSO_JOB ON vTVGI_PERS.PSO_JOB_CD = vTPSO_JOB.PSO_JOB_CD INNER join AVGI00.VPO_RLSHP vTPO_RLSHP ON vTVGI_PERS.CREW_PO_ID=vTPO_RLSHP.PO_ID and vTPO_RLSHP.PO_RLSHP_CD = 'SUPV' INNER join AVGI00.VCIN0910 vTCIN091Mngr ON vTPO_RLSHP.RLTD_PO_ID=vTCIN091Mngr.PO_ID WHERE vTCIN091.VGI_ORG_ID  in (0614, 0624, 0706, 0707) and vTCIN091.USER_ID like 'U%' and vTCIN091Mngr.VGI_ORG_ID  in (0614, 0624, 0706, 0707) and vTCIN091Mngr.USER_ID like 'U%') crewCmnt ON TACATS_XFRTXN_CMNT.CMNT_USER_ID = crewCmnt.Crew_User_IDC left outer join (SELECT C.NSCC_ACCT_SOC_CD Social_Code, C.UFS_CD, A.VAST_ACCT_NO, A.PORT_ID FROM AVGI00.VMUTL_FND_POSN A INNER JOIN AVGI00.VSAG_ACCT_RLSHP B ON A.ACCT_ID = B.RLSHP_ID INNER JOIN AVGI00.VAGRMT_RGSTRN_IIG C ON C.SAG_ID = B.SAG_ID INNER JOIN AVGI00.VSAG VSAG ON VSAG.SAG_ID = B.SAG_ID where B.RLSHP_TYP_CD = 'ACCT' AND VSAG.SERV_ID in (8,38)) Social_Code ON Social_Code.VAST_ACCT_NO = vTACATS_XFR_TXN.ACCT_NO_FND_DLV and Social_Code.PORT_ID = vTACATS_XFR_TXN.VGI_FND_ID order by Settlement_Date desc)abc").load()
+
+tab_df1 = sqlContext.registerDataFrameAsTable(df1, "ora_table")
+tab_df2 = sqlContext.registerDataFrameAsTable(df2, "db2_table")
+
+sqlContext.sql("insert into table dmrwork.spark_table select * from db2_table left outer join ora_table on trim(ora_table.VGI_PLAN_MA) = trim(db2_table.MASTER_ACCOUNT_NUMBER)")
+
+
+STORING SQLContext data frame to hadoop:
+ 
+ 
+df1.save(path='hdfs://nameservice1/work/dmr/data/abc2.txt')
+
+res_df = sqlContext.sql("select cast(MASTER_ACCOUNT_NUMBER as string) as MASTER_ACCOUNT_NUMBER ,cast(ACCOUNT_TYPE as string) as ACCOUNT_TYPE ,cast(FUND_CUSIP_NO as string) as FUND_CUSIP_NO ,cast(DOLLAR_AMOUNT_GROSS as string) as DOLLAR_AMOUNT_GROSS,cast(FIRM_CUSTOMER_ACCOUNT_NUMBER as string) as FIRM_CUSTOMER_ACCOUNT_NUMBER,cast(MATRIX_LEVEL as string) as MATRIX_LEVEL,cast(TRADE_DATE_TS as string) as TRADE_DATE_TS,cast(MATRIX_LEVEL_TO as string) as MATRIX_LEVEL_TO,cast(MEMBERSHIP_ID as string) as MEMBERSHIP_ID,cast(MEMBERSHIP_ID_TO as string) as MEMBERSHIP_ID_TO,cast(NSCC_CL_ID as string) as NSCC_CL_ID,cast(TRNSFR_TYP_CD as string) as TRNSFR_TYP_CD,cast(ACCT_NO_FND_RCV as string) ACCT_NO_FND_RCV,cast(ACCT_NO_FND_DLV as string) as ACCT_NO_FND_DLV,cast(VGI_FND_ID as string) as VGI_FND_ID,cast(SHARE_QUANTITY as string) as SHARE_QUANTITY,cast(GIFT_INDICATOR as string) as GIFT_INDICATOR,cast(DLV_FIRM_NO as string) as DLV_FIRM_NO,cast(RCV_FIRM_NO as string) as RCV_FIRM_NO,cast(SETTLEMENT_DATE as string) as SETTLEMENT_DATE,cast(SETTLMT_DT as string) as SETTLMT_DT,cast(SHARE_PRICE_AMOUNT as string) as SHARE_PRICE_AMOUNT,cast(TRANSACTION_CODE as string) as TRANSACTION_CODE,cast(TIN_UNDERLYING_PRIMARY_CLIENT as string) as TIN_UNDERLYING_PRIMARY_CLIENT,cast(VAST_POSTED_FLAG as string) as VAST_POSTED_FLAG,cast(VAST_SHELL_ACCOUNT_ID as string) as VAST_SHELL_ACCOUNT_ID,cast(PROCESS_DATE as string) as PROCESS_DATE,cast(TRADE_DATE as string) as TRADE_DATE,cast(VGI_PLAN_MA as string) as VGI_PLAN_MA,cast(PLAN_NAME as string) as PLAN_NAME,cast(COMPANY_NAME as string) as COMPANY_NAME,cast(BUSINESS_LINE_SUB_LINE as string) as BUSINESS_LINE_SUB_LINE,cast(BUSINESS_LINE_IND as string) as BUSINESS_LINE_IND,cast(BUSINESS_SUB_LINE as string) as BUSINESS_SUB_LINE,cast(SUB_TYPE_CD as string) as SUB_TYPE_CD,cast(SUB_TYPE as string) as SUB_TYPE,cast(OPER_SERVICE_SEGMENT as string) as OPER_SERVICE_SEGMENT,cast(INTL_MARKET_SEGMENT as string) as INTL_MARKET_SEGMENT,cast(STATUS as string) as STATUS,cast(RM_FIRST_NAME as string) as RM_FIRST_NAME,cast(RM_LAST_NAME as string) as RM_LAST_NAME,cast(PRIMARY_COVERAGE_TEAM_MEMBER as string) as PRIMARY_COVERAGE_TEAM_MEMBER,cast(FIRM_ID as string) as FIRM_ID,cast(CRD_NUMBER as string) as CRD_NUMBER from db2_table left outer join ora_table on trim(ora_table.VGI_PLAN_MA) = trim(db2_table.MASTER_ACCOUNT_NUMBER)")
+res_df.write.format('com.databricks.spark.avro').save(path='hdfs://nameservice1/work/dmr/data/abc2.txt')
+
+####################
+overwrite and save:
+####################
+myDataFrame.save(path='myPath', source='parquet', mode='overwrite')
+
+
+CREATE EXTERNAL TABLE IF NOT EXISTS spark_avro_table
+STORED AS AVRO
+LOCATION 'hdfs://nameservice1/work/dmr/data/abc2.txt/'
+TBLPROPERTIES ('avro.schema.url'='hdfs://nameservice1/work/dmr/data/spark_rdd.avsc');
+ 
+by default saves as parquet file.
+ 
+Hive:
+use dmrwork; 
+CREATE EXTERNAL TABLE parquet_test (VGI_Plan_MA STRING,Plan_Name STRING,Company_Name STRING,Business_Line_Sub_Line STRING,Business_Line_Ind STRING,Business_Sub_Line STRING,SUB_TYPE_CD  STRING,Sub_Type STRING,Oper_Service_Segment STRING,Intl_Market_Segment STRING,Status STRING,RM_First_Name STRING,RM_Last_Name STRING,Primary_Coverage_Team_Member STRING,FIRM_ID STRING,CRD_Number STRING) STORED AS PARQUET LOCATION 'hdfs://nameservice1/work/dmr/data/abc2.txt/';
+ 
+
+
++++++++++++++++++++++
+Task exception could not be deserialized:
+http://stackoverflow.com/questions/31947335/how-kryo-serializer-allocates-buffer-in-spark
+http://stackoverflow.com/questions/32667068/save-spark-dataframe-into-elasticsearch-can-t-handle-type-exception
+https://ogirardot.wordpress.com/2015/01/09/changing-sparks-default-java-serialization-to-kryo/
++++++++++++++++++++++
+
+from pyspark import SparkContext, SparkConf
+from pyspark import SQLContext
+conf = SparkConf().set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").set("spark.kryoserializer.buffer","256")
+sc = SparkContext(conf=conf)
+sqlContext = SQLContext(sc)
+
+
+Creating maven project:
+https://www.youtube.com/watch?v=zPg5aPjh-sA
+
+Submit a Jar in spark:
+spark-submit --class com.vanguard.wordcount /data/hadoop/work/dmr/jars/new_count1.jar hdfs://nameservice1/work/dmr/data/dates_file/dates.txt 1
+
+With Jcommander parameters:
+spark-submit --class com.vanguard.jdbc_conn.rdbms_conn --jars /data/hadoop/work/dmr/db2jcc.jar,/data/hadoop/work/dmr/db2jcc_license_cu.jar,/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar,/data/hadoop/work/dmr/ojdbc6.jar /data/hadoop/work/dmr/jars/rdbms_conn2.jar --driver "oracle.jdbc.OracleDriver" --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/db2jcc.jar,/data/hadoop/work/dmr/db2jcc_license_cu.jar,/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar --driver-class-path /data/hadoop/work/dmr/ojdbc6.jar:/data/hadoop/work/dmr/db2jcc.jar:/data/hadoop/work/dmr/db2jcc_license_cu.jar:/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar:/data/hadoop/work/dmr/jars/db2jcc4.jar --url "jdbc:oracle:thin:adfm21q/D6eap32r@ldap://oidprd60:3060/vcisat50_report,cn=OracleContext,dc=vanguard,dc=com" --sql "(SELECT * FROM SIEBEL.S_ASSET)abc"
+
+Joining two db and store result:
+spark-submit --class com.vanguard.jdbc_conn.db_conn --jars /data/hadoop/work/dmr/db2jcc.jar,/data/hadoop/work/dmr/db2jcc_license_cu.jar,/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar,/data/hadoop/work/dmr/ojdbc6.jar /data/hadoop/work/dmr/jars/db_conn.jar --driver1 "oracle.jdbc.OracleDriver" --driver2 "oracle.jdbc.OracleDriver" --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/db2jcc.jar,/data/hadoop/work/dmr/db2jcc_license_cu.jar,/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar --driver-class-path /data/hadoop/work/dmr/ojdbc6.jar:/data/hadoop/work/dmr/db2jcc.jar:/data/hadoop/work/dmr/db2jcc_license_cu.jar:/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar:/data/hadoop/work/dmr/jars/db2jcc4.jar --url1 "jdbc:oracle:thin:adfm21q/D6eap32r@ldap://oidprd60:3060/vcisat50_report,cn=OracleContext,dc=vanguard,dc=com" --url2 "jdbc:oracle:thin:adfm21q/D6eap32r@ldap://oidprd60:3060/vcisat50_report,cn=OracleContext,dc=vanguard,dc=com" --sql1 "(SELECT * FROM SIEBEL.S_ASSET)abc" --sql2 "(SELECT * FROM SIEBEL.S_ASSET)abc" -jq "SELECT count(*) FROM table1 inner join table2 on table1.LAST_UPD = table2.LAST_UPD" -sp "hdfs://nameservice1/work/dmr/data/people_avro"
+
+
+
+UDF in Spark:
+https://ragrawal.wordpress.com/2015/10/02/spark-custom-udf-example/
+https://docs.cloud.databricks.com/docs/latest/databricks_guide/index.html#04%20SQL,%20DataFrames%20%26%20Datasets/03%20UDF%20and%20UDAF%20-%20scala.html
+http://stackoverflow.com/questions/30511508/writing-a-udf-in-spark-sql-with-scala
+http://www.sparktutorials.net/using-sparksql-udfs-to-create-date-times-in-spark-1.5
+https://forums.databricks.com/questions/79/how-can-i-register-custom-udfs.html
+https://jaceklaskowski.gitbooks.io/mastering-apache-spark/content/spark-sql-udfs.html
+
+Using UDF IN PYSPARK:
+
+from pyspark.sql import SQLContext, Row
+from pyspark.sql import SQLContext
+from pyspark.sql.types import *
+sqlContext = SQLContext(sc)
+text_rdd = sc.textFile('hdfs://nameservice1/work/dmr/data/dates_file/dates.txt')
+parts = text_rdd.map(lambda x: x.split(","))
+records_rdd = parts.map(lambda p: Row(name=p[0],date1=p[1],date2=p[2],date3=p[3],date4=p[4],score=p[5]))
+rdd_to_df = sqlContext.createDataFrame(records_rdd)
+tab_df = sqlContext.registerDataFrameAsTable(rdd_to_df, "table1")
+
+### UDF
+from pyspark.sql.functions import udf
+def scoreToCategory(score):
+    if score >= 80: return 'A'
+    elif score >= 60: return 'B'
+    elif score >= 35: return 'C'
+    else: return 'D'
+
+### Register UDF as Function:
+sqlContext.registerFunction("scoreToCategory", scoreToCategory)
+
+### Using the UDF Function:
+
+sqlContext.sql("SELECT name, scoreToCategory(cast(score as int)) from table1").collect()
+
+
+##############################
+Scala UDF:
+
+val airlines = sc.textFile("hdfs://nameservice1/work/dmr/data/dates_file/dates.txt")
+val parts = airlines.map(line => line.split(","))
+case class X(name: String, date1: String, date2: String, date3: String, date4: String, score: String)
+val airlines_df = parts.map { 
+  case Array(s0, s1, s2, s3, s4, s5) => X(s0, s1, s2, s3, s4, s5) }.toDF()
+airlines_df.registerTempTable("airlines")
+
+### UDF
+import org.apache.spark.sql.functions.udf
+val udfScoreToCategory = (score: Int)  => {
+        score match {
+        case t if t >= 80 => "A"
+        case t if t >= 60 => "B"
+        case t if t >= 35 => "C"
+        case _ => "D"
+    }}
+
+### Register UDF as Function:
+sqlContext.udf.register("udfScoreToCategory", udfScoreToCategory)
+
+sqlContext.sql("SELECT name, udfScoreToCategory(cast(score as int)) from airlines").collect()
+
+### Register jar as udf:
+
+code:
+
+package com.vanguard.jdbc_conn
+import org.apache.spark._
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+import com.databricks.spark.xml
+import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.api.java.UDF1
+
+object scala_udf  {
+    val udfScoreToCategory = (score: Int) => {
+      score match {
+        case t if t >= 80 => "A"
+        case t if t >= 60 => "B"
+        case t if t >= 35 => "C"
+        case _ => "D"  
+      }
+    }
+  
+}
+
+### SCALA UDF for date convertion:
+
+def convert(time:String) : java.sql.Date = {
+      val format = new java.text.SimpleDateFormat("dd-MMM-yy")
+      if(!time.equalsIgnoreCase("")){
+      return new java.sql.Date(format.parse(time).getTime())
+      } else {
+      return new java.sql.Date(format.parse("01-JAN-01").getTime())
+      }
+      } 
+
+sqlContext.udf.register("convert", convert)
+
+### or built in func:
+new_df.select($"Actual_First_Drop",to_date(unix_timestamp($"Actual_First_Drop", "dd-MMM-yy").cast("timestamp"))).show(4)
+
+Sql query :
+
+sqlContext.sql("SELECT count(*) from fas_csv where from_unixtime(unix_timestamp(Actual_First_Drop, 'dd-MMM-yy')) > '2014-12-31 00:00:00' and from_unixtime(unix_timestamp(Actual_First_Drop, 'dd-MMM-yy')) < '2016-01-01 00:00:00' and Actual_First_Drop != ''").show()
+
+####
+step 1: make the above code as jar (scala_udf.jar)
+step 2: launch scala shell
+        spark-shell --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/jars/scala_udf.jar,/data/hadoop/work/dmr/jars/scala_udf.jar,/data/hadoop/work/dmr/jars/scala_udf.jar --driver-class-path /data/hadoop/work/dmr/jars/scala_udf.jar --jars /data/hadoop/work/dmr/jars/scala_udf.jar
+Step 3: load data ( val airlines )
+Step 4: val udfScoreToCategory = com.vanguard.jdbc_conn.scala_udf.udfScoreToCategory
+Step 5: sqlContext.udf.register("udfScoreToCategory", udfScoreToCategory)
+Step 6: sqlContext.sql("SELECT name, udfScoreToCategory(cast(score as int)) from airlines").collect()
+        sqlContext.sql("SELECT name, udfScoreToCategory(cast(score as int)) from airlines").show()
+
+
+##############################################
+Type 2 ( will register udf as function and works with dataframe and table):
+##############################################
+
+import org.apache.spark.sql.functions.udf
+def udfScoreToCategory(score: Int) = {
+        score match {
+        case t if t >= 80 => "A"
+        case t if t >= 60 => "B"
+        case t if t >= 35 => "C"
+        case _ => "D"
+    }}
+
+### Register UDF as Function:
+sqlContext.udf.register("udfScoreToCategory", udfScoreToCategory(_:Int))
+
+sqlContext.sql("SELECT name, udfScoreToCategory(cast(score as int)) from airlines").collect()
+
+### or directly with dataframe:
+airlines_df.withColumn("category", udfScoreToCategory(airlines_df("score"))).collect()
+
+
+################
+Set log level :
+################
+
+sc.setLogLevel("WARN")
+
+####################################
+coalesce array<struct... datatype work arround:
+####################################
+#Step 1: create a new file (test_samp.xml) with same array data structute for which null values to be replaced.
+
+#step 2:
+val df1 = sqlContext.read.format("com.databricks.spark.xml").option("rowTag", "InvestmentVehicle").load("hdfs://nameservice1/work/dmr/data/test_samp.xml")
+
+val df1_tab = df1.select($"@_Id",$"ProviderCompanies.ProviderCompanyDetail")
+
+df1_tab.registerTempTable("df1_table")
+
+val df2 = sqlContext.sql("SELECT `@_Id` , ProviderCompanyDetail from df1_table")
+
+#Step 3:
+
+val org_df = sqlContext.read.format("com.databricks.spark.xml").option("rowTag", "InvestmentVehicle").load("hdfs://nameservice1/work/dmr/data/test_sa.xml")
+val org_tab = org_df.select($"@_Id",$"Operation.ProviderCompanies.ProviderCompanyDetail")
+org_tab.registerTempTable("org_table")
+val org_tab = sqlContext.sql("SELECT `@_Id` , ProviderCompanyDetail from org_table")
+
+val res_tab = sqlContext.sql("SELECT org_table.`@_Id`,org_table.ProviderCompanyDetail,df1_table.ProviderCompanyDetail as new_val from org_table full outer join df1_table on org_table.`@_Id` != df1_table.`@_Id`").show()
+
+#Step 4:
+#####workaround with coalesce array datatype:
+
+res_tab.registerTempTable("res_tab")
+sqlContext.sql("SELECT `@_Id`, coalesce(ProviderCompanyDetail, new_val) as new_res from res_tab").show()
+
+####or with (df )
+
+val fin_res = res_tab.withColumn("ProviderCompanyDetail",when(size($"ProviderCompanyDetail") !== 0, $"ProviderCompanyDetail").otherwise($"new_val"))
+
+############################
+
+###parametr for action samp:###
+
+from pyspark import SparkContext, SparkConf
+from pyspark import SQLContext
+conf = SparkConf().set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").set("spark.kryoserializer.buffer","256")
+sc = SparkContext(conf=conf)
+sqlContext = SQLContext(sc)
+
+df1 = sqlContext.read.format('jdbc').options(url='jdbc:oracle:thin:adfm21q/D6eap32r@ldap://oidprd60:3060/vcisat50_report,cn=OracleContext,dc=vanguard,dc=com', dbtable="(select distinct TRIM(S_ASSET5.ASSET_NUM) VGI_Plan_MA,S_ASSET5.X_PLAN_NAME Plan_Name,S_ORG_EXT.NAME Company_Name,S_ASSET5.TYPE_CD Business_Line_Sub_Line,S_ASSET5.X_BUS_LINE_CD Business_Line_Ind,S_ASSET5.X_SUB_LINE_CD Business_Sub_Line,S_ASSET5.SUB_TYPE_CD ,S_ASSET5.PNSN_SUBTYPE_CD Sub_Type,S_FN_ACCNT3_FNX.ATTRIB_04 Oper_Service_Segment,S_ASSET5.CFG_TYPE_CD Intl_Market_Segment,S_ASSET5.STATUS_CD Status,S_CONTACT.FST_NAME RM_First_Name,S_CONTACT.LAST_NAME RM_Last_Name,TRIM(S_CONTACT.FST_NAME) || ' ' || TRIM(S_CONTACT.LAST_NAME) as Primary_Coverage_Team_Member,S_ORG_EXT_X.ATTRIB_42 FIRM_ID,S_ORG_EXT_X.ATTRIB_39 CRD_Number FROM SIEBEL.S_ASSET S_ASSET5 INNER JOIN  SIEBEL.S_ASSET_POSTN ON (S_ASSET_POSTN.ASSET_ID=S_ASSET5.ROW_ID) INNER JOIN SIEBEL.S_POSTN ON (S_POSTN.ROW_ID=S_ASSET_POSTN.POSITION_ID) LEFT OUTER JOIN SIEBEL.S_CONTACT ON (S_POSTN.PR_EMP_ID = S_CONTACT.ROW_ID and S_CONTACT.PRIV_FLG = 'N') LEFT OUTER JOIN SIEBEL.S_FN_ACCNT3_FNX on (S_ASSET5.ROW_ID=S_FN_ACCNT3_FNX.PAR_ROW_ID) LEFT OUTER JOIN SIEBEL.S_ORG_EXT on (S_ORG_EXT.ROW_ID=S_ASSET5.OWNER_ACCNT_ID) LEFT OUTER JOIN SIEBEL.S_ORG_EXT_X on (S_ORG_EXT.ROW_ID=S_ORG_EXT_X.ROW_ID) where (TRIM(S_ASSET5.ASSET_NUM) between '10000' and '18999' or TRIM(S_ASSET5.ASSET_NUM) between '45000' and '46999' or TRIM(S_ASSET5.ASSET_NUM) between '50000' and '55554' or TRIM(S_ASSET5.ASSET_NUM) like 'J%' or TRIM(S_ASSET5.ASSET_NUM) like 'XA%' or TRIM(S_ASSET5.ASSET_NUM) like 'XB%') AND (TRIM(S_CONTACT.FST_NAME) || ' ' || TRIM(S_CONTACT.LAST_NAME) ) not  in ('Guest Guest' , 'AIBG10P AIBG10P' , 'EAI Administrator' , 'Aeilp Support' , 'RM EAI Desktop' ,'International Autonomy') ORDER BY VGI_Plan_MA)abc",driver="oracle.jdbc.OracleDriver").load()
+
+for i in range(1,4):
+    value_rec = str("hdfs://nameservice1/work/dmr/data/abc%d.txt" % (i))
+    print(str(value_rec))
+    df1.save(path=str(value_rec))
+    #print("hdfs://nameservice1/work/dmr/data/abc%d.txt" % (i))
+    #df1.save(path="hdfs://nameservice1/work/dmr/data/abc%d.txt" % (i)) > log_file.txt
+    #os.spawnl(os.P_DETACH, 'df1.save(path=str(value_rec))')
+    #subprocess.Popen(["df1.save(path=str(value_rec))"])
+    #cmd = df1.save(path=str(value_rec))
+    #os.system(cmd)
+
+
+
