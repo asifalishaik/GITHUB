@@ -1,0 +1,443 @@
+
+
+from pyspark import SparkContext, SparkConf
+from pyspark import SQLContext
+conf = SparkConf()
+sc = SparkContext(conf=conf)
+sqlContext = SQLContext(sc)
+from pyspark.sql import Row
+from pyspark.sql.types import *
+
+df1 = sc.textFile('file:/home/jovyan/work/datasets/datasets/airmiles.csv')
+header = df1.first()
+data = df1.filter(lambda x:x !=header)
+parts = data.map(lambda x: x.split(","))
+records_rdd = parts.map(lambda p: Row(numb=p[0],year=p[1],airmiles=p[2]))
+rdd_to_df = sqlContext.createDataFrame(records_rdd)
+tab_df = sqlContext.registerDataFrameAsTable(rdd_to_df, "table1")
+res_df = sqlContext.sql("select distinct(year) from table1 limit 4")
+res_df.collect()
+
+
+Scala:
+
+###Adding configuration:
+val cfg = new SparkConf().setAppName("MySparkJob")
+cfg.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+cfg.set("spark.kryo.registrator", "com.stackoverflow.Registrator")
+
+
+val textFile = sc.textFile("file:/home/jovyan/work/datasets/datasets/airmiles.csv")
+val header = textFile.first()
+println(header)
+val data = textFile.filter(text => !text.toString.contains(header))
+data.collect()
+val parts = data.map(line => line.split(","))
+parts.collect()
+
+### Create schema for the csv file.
+case class X(numb: String, year: String, airmiles: String)
+
+### Assign created schema to the rdd of array and convert to dataframe.
+
+val sqlContext= new org.apache.spark.sql.SQLContext(sc)
+import sqlContext.implicits._
+
+val df = parts.map { 
+  case Array(s0, s1, s2) => X(s0, s1, s2) }.toDF()
+
+df.show()
+
+### Create a temp table on DataFrame.
+https://www.codementor.io/spark/tutorial/python-spark-sql-dataframes
+
+df.registerTempTable("interactions")
+
+val tcp_interactions = sqlContext.sql("""SELECT * from interactions where cast(year as int) > 1945""")
+
+tcp_interactions.show()
+
+###joins / operations on dataframes without creation of table.
+http://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.DataFrame
+
+Cast columns:
+val test11 = df.select($"@_Id",$"Operation.ProviderCompanies.ProviderCompanyDetail".cast("string"))
+----
+STRING TO ARRAY:
+val df5 = df3.select($"@_Id",$"up_ProviderCompanyDetail").rdd.map( r => (r(0),r(1))).collect()
+
+Replace null with string:
+val test11 = df.select($"@_Id",$"Operation.ProviderCompanies.ProviderCompanyDetail".cast("string")).na.fill("no_val", Seq("ProviderCompanyDetail"))
+
+
+Reading Avro file:
+
+val avro_df = sqlContext.read.format("com.databricks.spark.avro").load("hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/Repository/SiebelBI/W_ORG_DX/datadate=20160412/")
+val df = avro_df.toDF()
+df.registerTempTable("interactions")
+val tcp_interactions = sqlContext.sql("""SELECT ETL_PROC_WID from interactions limit 1""")
+tcp_interactions.show()
+
+
+RDBMS CONNECTION :
+https://www.supergloo.com/fieldnotes/spark-sql-mysql-example-jdbc/
+https://community.hortonworks.com/articles/4671/sparksql-jdbc-federation.html
+
+spark-shell --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/db2jcc.jar,/data/hadoop/work/dmr/db2jcc_license_cu.jar,/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar --driver-class-path /data/hadoop/work/dmr/ojdbc6.jar:/data/hadoop/work/dmr/db2jcc.jar:/data/hadoop/work/dmr/db2jcc_license_cu.jar:/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar:/data/hadoop/work/dmr/jars/db2jcc4.jar --jars /data/hadoop/work/dmr/ojdbc6.jar,/data/hadoop/work/dmr/db2jcc.jar,/data/hadoop/work/dmr/db2jcc_license_cu.jar,/data/hadoop/work/dmr/jars/db2jcc_license_cisuz.jar,/data/hadoop/work/dmr/jars/db2jcc4.jar
+
+val df1 = sqlContext.read.format("jdbc").option("url","jdbc:oracle:thin:adfm21q/D6eap32r@ldap://oidprd60:3060/vcisat50_report,cn=OracleContext,dc=vanguard,dc=com").option("dbtable","(select * FROM SIEBEL.S_ASSET)abc").option("driver","oracle.jdbc.OracleDriver").load()
+df1.registerTempTable("interactions")
+val tcp_interactions = sqlContext.sql("SELECT X_VG_PR_REL_COM_ID from interactions limit 1")
+
+tcp_interactions.show()
+
+
+QUERY WITH WHERE CONDITION:
+
+val df1 = sqlContext.read.format("jdbc").option("driver","oracle.jdbc.OracleDriver").option("url","jdbc:oracle:thin:adfm21q/D6eap32r@ldap://oidprd60:3060/vcisat50_report,cn=OracleContext,dc=vanguard,dc=com").option("dbtable","(select distinct TRIM(S_ASSET5.ASSET_NUM) VGI_Plan_MA,S_ASSET5.X_PLAN_NAME Plan_Name,S_ORG_EXT.NAME Company_Name,S_ASSET5.TYPE_CD Business_Line_Sub_Line,S_ASSET5.X_BUS_LINE_CD Business_Line_Ind,S_ASSET5.X_SUB_LINE_CD Business_Sub_Line,S_ASSET5.SUB_TYPE_CD ,S_ASSET5.PNSN_SUBTYPE_CD Sub_Type,S_FN_ACCNT3_FNX.ATTRIB_04 Oper_Service_Segment,S_ASSET5.CFG_TYPE_CD Intl_Market_Segment,S_ASSET5.STATUS_CD Status,S_CONTACT.FST_NAME RM_First_Name,S_CONTACT.LAST_NAME RM_Last_Name,TRIM(S_CONTACT.FST_NAME) || ' ' || TRIM(S_CONTACT.LAST_NAME) as Primary_Coverage_Team_Member,S_ORG_EXT_X.ATTRIB_42 FIRM_ID,S_ORG_EXT_X.ATTRIB_39 CRD_Number FROM SIEBEL.S_ASSET S_ASSET5 INNER JOIN  SIEBEL.S_ASSET_POSTN ON S_ASSET_POSTN.ASSET_ID=S_ASSET5.ROW_ID INNER JOIN SIEBEL.S_POSTN ON S_POSTN.ROW_ID=S_ASSET_POSTN.POSITION_ID LEFT OUTER JOIN SIEBEL.S_CONTACT ON S_POSTN.PR_EMP_ID = S_CONTACT.ROW_ID and S_CONTACT.PRIV_FLG = 'N' LEFT OUTER JOIN SIEBEL.S_FN_ACCNT3_FNX on S_ASSET5.ROW_ID=S_FN_ACCNT3_FNX.PAR_ROW_ID LEFT OUTER JOIN SIEBEL.S_ORG_EXT on S_ORG_EXT.ROW_ID=S_ASSET5.OWNER_ACCNT_ID LEFT OUTER JOIN SIEBEL.S_ORG_EXT_X on S_ORG_EXT.ROW_ID=S_ORG_EXT_X.ROW_ID where (TRIM(S_ASSET5.ASSET_NUM) between '10000' and '18999' or TRIM(S_ASSET5.ASSET_NUM) between '45000' and '46999' or TRIM(S_ASSET5.ASSET_NUM) between '50000' and '55554' or TRIM(S_ASSET5.ASSET_NUM) like 'J%' or TRIM(S_ASSET5.ASSET_NUM) like 'XA%' or TRIM(S_ASSET5.ASSET_NUM) like 'XB%') AND (TRIM(S_CONTACT.FST_NAME) || ' ' || TRIM(S_CONTACT.LAST_NAME) ) not  in ('Guest Guest' , 'AIBG10P AIBG10P' , 'EAI Administrator' , 'Aeilp Support' , 'RM EAI Desktop' ,'International Autonomy') ORDER BY VGI_Plan_MA)abc").load()
+
+df1.registerTempTable("interactions")
+val tcp_interactions = sqlContext.sql("SELECT VGI_Plan_MA from interactions limit 1")
+
+tcp_interactions.show()
+
+
+DB2 Connection:
+
+val df2 = sqlContext.load("jdbc", Map("url" -> "jdbc:db2://db2cdq0r:5032/VGIDQ0G","user" -> "ADFM22Q","password" -> "dfm98cat","driver" -> "com.ibm.db2.jcc.DB2Driver","dbtable" -> "(Select * from AVGI00.VACATS_XFR_TXN)abc"))
+df2.registerTempTable("interactions")
+val tcp_interactions = sqlContext.sql("SELECT ACCT_TYP_IND from interactions limit 1")
+
+tcp_interactions.show()
+
+
+Save to a file:
+
+Parquet: ( only DF can be stored as parquet file)
+tcp_interactions.saveAsParquetFile("hdfs://nameservice1/work/dmr/data/people.parquet")
+
+Text file: ( DF should be converted to rdd to save as text files)
+tcp_interactions.rdd.saveAsTextFile("hdfs://nameservice1/work/dmr/data/people.txt")
+
+Avro file:
+tcp_interactions.write.format("com.databricks.spark.avro").save("hdfs://nameservice1/work/dmr/data/people_avro")
+
+Save with overwrite: ( http://www.slideshare.net/fullscreen/databricks/yin-huai-20150325meetupwithdemos/29 )
+import org.apache.spark.sql.SaveMode
+tcp_interactions.write.format("com.databricks.spark.avro").mode(SaveMode.Overwrite).save("hdfs://nameservice1/work/dmr/data/people_avro")
+
+
+Airline passengers: ( https://tmp47.tmpnb.org/user/nCmBWE8qUFvu/notebooks/Untitled.ipynb?kernel_name=scala )
+
+val airpassengers = sc.textFile("file:/home/jovyan/work/datasets/datasets/AirPassengers.csv")
+val airpassengers_header = airpassengers.first()
+val airpassengers_noheader = airpassengers.filter(text => !text.toString.contains(airpassengers_header))
+val airpassengers_array = airpassengers_noheader.map(line => line.split(","))
+case class X(numb: String, year: String, airmiles: String)
+val sqlContext= new org.apache.spark.sql.SQLContext(sc)
+import sqlContext.implicits._
+val airpassengers_df = airpassengers_array.map { 
+  case Array(s0, s1, s2) => X(s0, s1, s2) }.toDF()
+airpassengers_df.registerTempTable("airpassengers")
+
+#########################
+val airpassengers_result = sqlContext.sql("""SELECT cast(year as decimal(32,2)) as year from airpassengers""")
+
+val airpassengers_result = sqlContext.sql("""select year, cast(sum(airmiles) as int) as passengers from (select cast(year as int) as year,airmiles from airpassengers) abc group by year""")
+val airpassengers_result = sqlContext.sql("""select year, cast(sum(airmiles) as int) as passengers from (select cast(year as int) as year,airmiles from airpassengers) abc group by year ORDER BY year desc""")
+val airpassengers_result = sqlContext.sql("""select year, cast(sum(airmiles) as int) as passengers from (select cast(year as int) as year,airmiles from airpassengers) abc group by year ORDER BY year asc""")
+##########################
+
+airpassengers_result.show()
+
+
+
+###Airlines data:
+
+val airlines = sc.textFile("file:/home/jovyan/work/datasets/datasets/airmiles.csv")
+val header = airlines.first()
+val data = airlines.filter(text => !text.toString.contains(header))
+val parts = data.map(line => line.split(","))
+case class X(numb: String, year: String, airmiles: String)
+val airlines_df = parts.map { 
+  case Array(s0, s1, s2) => X(s0, s1, s2) }.toDF()
+airlines_df.registerTempTable("airlines")
+val airlines_result = sqlContext.sql("""SELECT * from airlines""")
+
+###Join Airline_passenger with Airlines:
+
+val airpassengers_result = sqlContext.sql("""select abc.year, cast(sum(abc.airmiles) as int) as passengers, sum(airlines.airmiles) as air_miles from (select cast(year as int) as year,airmiles from airpassengers) abc left outer join airlines on abc.year=airlines.year group by abc.year""")
+airpassengers_result.show()
+
+
+###Reading Json File:
+http://blog.antlypls.com/blog/2016/01/30/processing-json-data-with-sparksql/
+
+val stringRDD = sc.parallelize(Seq(""" {
+        "name":"Product",
+        "properties":
+        {
+                "id":
+                {
+                        "type":"number",
+                        "description":"Product identifier",
+                        "required":true
+                },
+                "name":
+                {
+                        "description":"Name of the product",
+                        "type":"string",
+                        "required":true
+                },
+                "price":
+                {
+                        "type":"number",
+                        "minimum":0,
+                        "required":true
+                },
+                "tags":
+                {
+                        "type":"array",
+                        "items":
+                        {
+                                "type":"string"
+                        },
+                        "price":
+                {
+                        "type":"number",
+                        "minimum":0,
+                        "required":true
+                }
+                }
+        }
+}""")
+)
+
+sqlContext.jsonRDD(stringRDD).registerTempTable("testjson")
+sqlContext.sql("SELECT * from testjson").show()
+
+sqlContext.sql("SELECT properties from testjson").show()
+sqlContext.sql("SELECT properties.id.description from testjson").show()
+sqlContext.sql("SELECT properties.name.description from testjson").show()
+sqlContext.sql("SELECT properties.tags.items.type from testjson").show()
+sqlContext.sql("SELECT properties.tags.price.required from testjson").show()
+
+
+
+Reading Json data from file:
+( https://spark-summit.org/2014/wp-content/uploads/2014/07/Easy-json-Data-Manipulation-Yin-Huai.pdf )
+
+One JSON object per line or One JSON object per record
+
+sample :
+{ "isActive": false,"balance": "$1,431.73","picture": "http://placehold.it/32x32","age": 35,"eyeColor": "blue"}
+{"isActive": true,"balance": "$2,515.60","picture": "http://placehold.it/32x32","age": 34,"eyeColor": "blue"} 
+{"isActive": false,"balance": "$3,765.29","picture": "http://placehold.it/32x32","age": 26,"eyeColor": "blue"}
+{"isActive": true,"balance": "$4,765.29","picture": "http://placehold.it/32x32","age": 26,"eyeColor": "blue"}
+
+
+val json_df = sqlContext.jsonFile("hdfs://nameservice1/work/dmr/data/new_file.json")
+
+###Register dataframe as table in scala:
+
+json_df.registerTempTable("json_df_table")
+
+sqlContext.sql("SELECT * from json_df_table").show()
+sqlContext.sql("SELECT eyeColor from json_df_table").show()
+
+
+Complex Json :
+{ "name":"Product","properties":  {"id":{"type":"number","description":"Product identifier","required":true},"name":{"description":"Name of the product","type":"string","required":true},"price":{"type":"number","minimum":0,"required":true},"tags":{"type":"array","items":{"type":"string"},"price":{"type":"number","minimum":0,"required":true}}}}
+ 
+val json_df = sqlContext.jsonFile("hdfs://nameservice1/work/dmr/data/file.json")
+or
+### Reading jsonfiles in directory:
+val json_df = sqlContext.jsonFile("hdfs://nameservice1/work/dmr/data/json/")
+
+json_df.printSchema
+
+scala> json_df.printSchema
+root
+ |-- name: string (nullable = true)
+ |-- properties: struct (nullable = true)
+ |    |-- id: struct (nullable = true)
+ |    |    |-- description: string (nullable = true)
+ |    |    |-- required: boolean (nullable = true)
+ |    |    |-- type: string (nullable = true)
+ |    |-- name: struct (nullable = true)
+ |    |    |-- description: string (nullable = true)
+ |    |    |-- required: boolean (nullable = true)
+ |    |    |-- type: string (nullable = true)
+ |    |-- price: struct (nullable = true)
+ |    |    |-- minimum: long (nullable = true)
+ |    |    |-- required: boolean (nullable = true)
+ |    |    |-- type: string (nullable = true)
+ |    |-- tags: struct (nullable = true)
+ |    |    |-- items: struct (nullable = true)
+ |    |    |    |-- type: string (nullable = true)
+ |    |    |-- price: struct (nullable = true)
+ |    |    |    |-- minimum: long (nullable = true)
+ |    |    |    |-- required: boolean (nullable = true)
+ |    |    |    |-- type: string (nullable = true)
+ |    |    |-- type: string (nullable = true)
+
+
+
+json_df.registerTempTable("json_df_table")
+sqlContext.sql("SELECT properties.tags.price.required from json_df_table").show()
+ 
+ 
+Query df with complex types:
+http://stackoverflow.com/questions/28332494/querying-spark-sql-dataframe-with-complex-types/38442783#38442783
+
+xml file:
+http://stackoverflow.com/questions/28332494/querying-spark-sql-dataframe-with-complex-types
+
+spark-shell --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/jars/spark-xml_2.11-0.3.3.jar --driver-class-path /data/hadoop/work/dmr/jars/spark-xml_2.11-0.3.3.jar --jars /data/hadoop/work/dmr/jars/spark-xml_2.11-0.3.3.jar
+
+
+scala> df.printSchema
+root
+ |-- @_Id: string (nullable = true)
+ |-- FundShareClass: struct (nullable = true)
+ |    |-- @_Id: string (nullable = true)
+ |    |-- Operation: struct (nullable = true)
+ |    |    |-- ShareClassBasics: struct (nullable = true)
+ |    |    |    |-- CUSIP: string (nullable = true)
+ |    |    |    |-- LegalType: struct (nullable = true)
+ |    |    |    |    |-- #VALUE: string (nullable = true)
+ |    |    |    |    |-- @_Id: string (nullable = true)
+ |    |    |    |-- Name: string (nullable = true)
+ |-- PortfolioList: struct (nullable = true)
+ |    |-- Portfolio: struct (nullable = true)
+ |    |    |-- @_CurrencyId: string (nullable = true)
+ |    |    |-- @_ExternalId: string (nullable = true)
+ |    |    |-- @xsi: string (nullable = true)
+ |    |    |-- Holding: struct (nullable = true)
+ |    |    |    |-- HoldingDetail: array (nullable = true)
+ |    |    |    |    |-- element: struct (containsNull = true)
+ |    |    |    |    |    |-- @_ExternalId: string (nullable = true)
+ |    |    |    |    |    |-- @_Id: string (nullable = true)
+ |    |    |    |    |    |-- AccruedInterest: double (nullable = true)
+ |    |    |    |    |    |-- AltMinTaxEligible: boolean (nullable = true)
+ |    |    |    |    |    |-- CUSIP: string (nullable = true)
+ |    |    |    |    |    |-- CostBasis: double (nullable = true)
+ |    |    |    |    |    |-- Country: struct (nullable = true)
+ |    |    |    |    |    |    |-- #VALUE: string (nullable = true)
+ |    |    |    |    |    |    |-- @_Id: string (nullable = true)
+ |    |    |    |    |    |-- Coupon: double (nullable = true)
+ |    |    |    |    |    |-- Currency: struct (nullable = true)
+ |    |    |    |    |    |    |-- #VALUE: string (nullable = true)
+ |    |    |    |    |    |    |-- @_Id: string (nullable = true)
+ |    |    |    |    |    |-- FirstBoughtDate: string (nullable = true)
+ |    |    |    |    |    |-- HoldingYTDReturn: double (nullable = true)
+ |    |    |    |    |    |-- ISIN: string (nullable = true)
+ |    |    |    |    |    |-- LegalType: string (nullable = true)
+ |    |    |    |    |    |-- LessThanOneYearBond: boolean (nullable = true)
+ |    |    |    |    |    |-- LocalMarketValue: struct (nullable = true)
+ |    |    |    |    |    |    |-- #VALUE: long (nullable = true)
+ |    |    |    |    |    |    |-- @_CurrencyCode: string (nullable = true)
+ |    |    |    |    |    |-- MarketValue: long (nullable = true)
+ |    |    |    |    |    |-- MaturityDate: string (nullable = true)
+ |    |    |    |    |    |-- NumberOfShare: long (nullable = true)
+ |    |    |    |    |    |-- Region: long (nullable = true)
+ |    |    |    |    |    |-- Rule144AEligible: boolean (nullable = true)
+ |    |    |    |    |    |-- SEDOL: string (nullable = true)
+ |    |    |    |    |    |-- Sector: long (nullable = true)
+ |    |    |    |    |    |-- SecurityName: string (nullable = true)
+ |    |    |    |    |    |-- ShareChange: long (nullable = true)
+ |    |    |    |    |    |-- StyleBox: long (nullable = true)
+ |    |    |    |    |    |-- Symbol: string (nullable = true)
+ |    |    |    |    |    |-- Weighting: double (nullable = true)
+ |    |    |-- PortfolioBreakdown: array (nullable = true)
+ |    |    |    |-- element: struct (containsNull = true)
+ |    |    |    |    |-- @_SalePosition: string (nullable = true)
+ |    |    |    |    |-- AssetAllocation: struct (nullable = true)
+ |    |    |    |    |    |-- BreakdownValue: array (nullable = true)
+ |    |    |    |    |    |    |-- element: struct (containsNull = true)
+ |    |    |    |    |    |    |    |-- #VALUE: double (nullable = true)
+ |    |    |    |    |    |    |    |-- @Type: long (nullable = true)
+ |    |    |-- PortfolioSummary: struct (nullable = true)
+ |    |    |    |-- Date: string (nullable = true)
+ |    |    |    |-- HoldingAggregate: array (nullable = true)
+ |    |    |    |    |-- element: struct (containsNull = true)
+ |    |    |    |    |    |-- @_SalePosition: string (nullable = true)
+ |    |    |    |    |    |-- NumberOfBondHolding: long (nullable = true)
+ |    |    |    |    |    |-- NumberOfHolding: long (nullable = true)
+ |    |    |    |    |    |-- NumberOfStockHolding: long (nullable = true)
+ |    |    |    |    |    |-- TotalMarketValue: long (nullable = true)
+
+
+val sqlContext = new SQLContext(sc)
+val df = sqlContext.read.format("com.databricks.spark.xml").option("rowTag", "book").load("hdfs://nameservice1/work/dmr/data/books.xml")
+df.printSchema
+val selectedData = df.select("author", "@id")
+selectedData.show()
+
+val df = sqlContext.read.format("com.databricks.spark.xml").option("rowTag", "InvestmentVehicle").load("hdfs://nameservice1/work/dmr/data/AllHoldings25_CT_USA_D_20160803.xml")
+val selectedData = df.select("@_Id", "FundShareClass:@_Id")
+
+-- select from nested array and struct data type
+val selectedData = df.select($"PortfolioList.Portfolio.Holding.HoldingDetail.@_ExternalId".getItem(0))
+
+--explode
+
+val selectedData = df.select(explode($"PortfolioList.Portfolio.Holding.HoldingDetail"))
+
+-- select string and complex data type with explode
+val selectedData = df.select($"@_Id",explode($"PortfolioList.Portfolio.Holding.HoldingDetail"))
+
+
+----
+val selectedData = df.select($"@_Id",$"FundShareClass",$"PortfolioList",$"PortfolioList.Portfolio",$"PortfolioList.Portfolio.@_CurrencyId",$"PortfolioList.Portfolio.@_ExternalId",$"PortfolioList.Portfolio.@xsi",$"PortfolioList.Portfolio.Holding",explode($"PortfolioList.Portfolio.Holding.HoldingDetail"),$"PortfolioList.Portfolio.PortfolioBreakdown")
+val selectedData1 = selectedData.select($"@_Id",$"PortfolioList.Portfolio.@_CurrencyId",$"PortfolioList.Portfolio.@_ExternalId",$"PortfolioList.Portfolio.@xsi",$"col.@_ExternalId",$"col.@_Id",$"PortfolioList.Portfolio.PortfolioBreakdown")
+val selectedData1 = selectedData.select($"@_Id".alias("top_id"),$"PortfolioList.Portfolio.@_CurrencyId",$"PortfolioList.Portfolio.@_ExternalId".alias("top_ext_id"),$"PortfolioList.Portfolio.@xsi",$"col.@_ExternalId",$"col.@_Id",$"PortfolioList.Portfolio.PortfolioBreakdown")
+val selectedData12 = selectedData1.select($"top_id",$"@_CurrencyId",$"top_ext_id",$"@xsi",$"@_ExternalId",$"@_Id",explode($"PortfolioBreakdown"))
+val selectedData123 = selectedData12.select($"top_id",$"@_CurrencyId",$"top_ext_id",$"@xsi",$"@_ExternalId",$"@_Id",$"col.@_SalePosition",explode($"col.AssetAllocation.BreakdownValue"))
+val selectedData1234 = selectedData123.select($"top_id",$"@_CurrencyId",$"top_ext_id",$"@xsi",$"@_ExternalId",$"@_Id",$"@_SalePosition",$"col.#VALUE",$"col.@Type")
+selectedData1234.show()
+
+-----
+spark-shell --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/jars/spark-xml_2.10-0.3.3.jar,/data/hadoop/work/dmr/jars/spark-csv_2.10-1.4.0.jar,/data/hadoop/work/dmr/jars/commons-csv-1.4.jar --driver-class-path /data/hadoop/work/dmr/jars/spark-xml_2.10-0.3.3.jar:/data/hadoop/work/dmr/jars/spark-csv_2.10-1.4.0.jar:/data/hadoop/work/dmr/jars/commons-csv-1.4.jar --jars /data/hadoop/work/dmr/jars/spark-xml_2.10-0.3.3.jar,/data/hadoop/work/dmr/jars/spark-csv_2.10-1.4.0.jar,/data/hadoop/work/dmr/jars/commons-csv-1.4.jar
+val df = sqlContext.read.format("com.databricks.spark.xml").option("rowTag", "InvestmentVehicle").load("hdfs://nameservice1/work/dmr/data/AllHoldings25_CT_USA_D_20160803.xml")
+val selectedData = df.select($"@_Id",$"FundShareClass",$"PortfolioList.Portfolio",explode($"PortfolioList.Portfolio.Holding.HoldingDetail"),$"PortfolioList.Portfolio.PortfolioBreakdown",$"PortfolioList.Portfolio.PortfolioSummary")
+val selectedData1 = selectedData.select($"@_Id",$"FundShareClass",$"Portfolio",$"col".alias("frst_arr"),explode($"PortfolioBreakdown"),$"PortfolioSummary")
+val selectedData12 = selectedData1.select($"@_Id",$"FundShareClass",$"Portfolio",$"frst_arr",$"col".alias("snd_arr"),$"PortfolioSummary.Date",explode($"PortfolioSummary.HoldingAggregate"))
+val selectedData123 = selectedData12.select($"@_Id",$"FundShareClass",$"Portfolio",$"frst_arr",$"snd_arr",explode($"snd_arr.AssetAllocation.BreakdownValue"),$"Date",$"col".alias("frth_arr"))
+val selectedData_res = selectedData123.select($"@_Id",$"FundShareClass.@_Id",$"FundShareClass.Operation.ShareClassBasics.CUSIP",$"FundShareClass.Operation.ShareClassBasics.LegalType.#VALUE",$"FundShareClass.Operation.ShareClassBasics.LegalType.@_Id",$"FundShareClass.Operation.ShareClassBasics.Name",$"Portfolio.@_CurrencyId",$"Portfolio.@_ExternalId",$"Portfolio.@xsi",$"frst_arr.@_ExternalId",$"frst_arr.@_Id",$"frst_arr.AccruedInterest",$"frst_arr.AltMinTaxEligible",$"frst_arr.CUSIP",$"frst_arr.CostBasis",$"frst_arr.Country.#VALUE",$"frst_arr.Country.@_Id",$"frst_arr.Coupon",$"frst_arr.Currency.#VALUE",$"frst_arr.Currency.@_Id",$"frst_arr.FirstBoughtDate",$"frst_arr.HoldingYTDReturn",$"frst_arr.ISIN",$"frst_arr.LegalType",$"frst_arr.LessThanOneYearBond",$"frst_arr.LocalMarketValue.#VALUE",$"frst_arr.LocalMarketValue.@_CurrencyCode",$"frst_arr.MarketValue",$"frst_arr.MaturityDate",$"frst_arr.NumberOfShare",$"frst_arr.Region",$"frst_arr.Rule144AEligible",$"frst_arr.SEDOL",$"frst_arr.Sector",$"frst_arr.SecurityName",$"frst_arr.ShareChange",$"frst_arr.StyleBox",$"frst_arr.Symbol",$"frst_arr.Weighting",$"snd_arr.@_SalePosition",$"col.#VALUE",$"col.@Type",$"Date",$"frth_arr.@_SalePosition",$"frth_arr.NumberOfBondHolding",$"frth_arr.NumberOfHolding",$"frth_arr.NumberOfStockHolding",$"frth_arr.TotalMarketValue")
+selectedData_res.write.format("com.databricks.spark.csv").option("header", "true").save(path="hdfs://nameservice1/work/dmr/data/all_holdings.csv")
+
+-----
+select subset of columns:
+
+selectedData7.select($"TrailingPerformance.MonthEndTrailingPerformance.TrailingReturnYTDCategorySize", $"TrailingPerformance.QuarterEndTrailingPerformance.*").show(2)
+
+-----
+select subset of columns and drop few columns:
+
+selectedData7.select($"TrailingPerformance.MonthEndTrailingPerformance.*",$"TrailingPerformance.MonthEndTrailingPerformance.BestFitIndex.#VALUE",$"TrailingPerformance.MonthEndTrailingPerformance.BestFitIndex.@_Id").drop($"BestFitIndex").printSchema
+
+-----
+Select sample data from dataframe:
+
+(sample(withReplacement, fraction, seed)  Sample a fraction fraction of the data, with or without replacement, using a given random number generator seed. )
+
+selectedData15.sample(true,0.01).count()
+
+-----
+Run commands from file:
+
+spark-shell -i data_xml_file.scala --conf spark.executor.extraClassPath=/data/hadoop/work/dmr/jars/spark-xml_2.10-0.3.3.jar,/data/hadoop/work/dmr/jars/spark-csv_2.10-1.4.0.jar,/data/hadoop/work/dmr/jars/commons-csv-1.4.jar --driver-class-path /data/hadoop/work/dmr/jars/spark-xml_2.10-0.3.3.jar:/data/hadoop/work/dmr/jars/spark-csv_2.10-1.4.0.jar:/data/hadoop/work/dmr/jars/commons-csv-1.4.jar --jars /data/hadoop/work/dmr/jars/spark-xml_2.10-0.3.3.jar,/data/hadoop/work/dmr/jars/spark-csv_2.10-1.4.0.jar,/data/hadoop/work/dmr/jars/commons-csv-1.4.jar
+
+------
+executor and driver memory:
+
+spark-shell --master yarn-client --jars /app/data/workspace/spark-xml_2.10-0.2.0.jar --executor-cores 1 --executor-memory 15g --driver-memory 20g --queue default --num-executors 30
+
+----
+xml parssing with empty tags:
+
+https://github.com/databricks/spark-xml/issues/134
+
+
+
