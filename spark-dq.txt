@@ -11,3 +11,34 @@ DQR003,KBE002,A,ACT_TYPE_WID <= 0
 #################################################################
 Readfile.sh to create py script:
 #################################################################
+
+rm -rf /data/hadoop/work/dmr/dq.py
+cat <<EOT >> /data/hadoop/work/dmr/dq.py
+import subprocess
+from pyspark import SparkContext, SparkConf
+from pyspark import SQLContext
+conf = SparkConf()
+sc = SparkContext(conf=conf)
+sqlContext = SQLContext(sc)
+W_ACTIVITY_F = sqlContext.read.format("com.databricks.spark.avro").load("hdfs://nameservice1/work/dmr/data/FAS_Advanced_Analytics_Data/Repository/SiebelBI/W_ACTIVITY_F/datadate=20160412/")
+tab_df = sqlContext.registerDataFrameAsTable(W_ACTIVITY_F, "table1")
+EOT
+
+IFS=","
+while read f1 f2 f3 f4
+do
+if [ "${f3}" = "PASSED" ] ; then
+echo "Passed rule"
+#echo "${f1} = sqlContext.sql(\"select ${f2} as kbecd,${f3} as casecd from table1 where ${f4}\")" >> /data/hadoop/work/dmr/dq.py
+echo "${f1} = sqlContext.sql(\"select count(*) from table1 where ${f4}\")" >> /data/hadoop/work/dmr/dq.py
+echo "subprocess.call([\"hadoop\", \"fs\", \"-rmr\", 'hdfs://nameservice1/work/dmr/data/${f1}'])" >> /data/hadoop/work/dmr/dq.py
+echo "${f1}.write.format('com.databricks.spark.avro').save(path='hdfs://nameservice1/work/dmr/data/${f1}/')" >> /data/hadoop/work/dmr/dq.py
+elif [ "${f3}" = "A" ] ; then
+echo "Detail rule"
+#echo "${f1} = sqlContext.sql(\"select ${f2} as kbecd,${f3} as casecd from table1 where ${f4}\")" >> /data/hadoop/work/dmr/dq.py
+echo "${f1} = sqlContext.sql(\"select count(*) from table1 where ${f4}\")" >> /data/hadoop/work/dmr/dq.py
+echo "subprocess.call([\"hadoop\", \"fs\", \"-rmr\", 'hdfs://nameservice1/work/dmr/data/${f1}'])" >> /data/hadoop/work/dmr/dq.py
+echo "${f1}.write.format('com.databricks.spark.avro').save(path='hdfs://nameservice1/work/dmr/data/${f1}/')" >> /data/hadoop/work/dmr/dq.py
+else
+echo "no rule match"
+fi
