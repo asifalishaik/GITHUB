@@ -1,0 +1,14 @@
+1) sub query in where clause does not work.
+2) If the table data is in avro, and it is partitioned table, then records are retrived as null but the partitioned column is retrived correctly.
+    work around : use parquet file format.
+3) Spark rdd/ df stored as text file is displayed as ( (Row=u'....', u'....')
+4) while storing as avro, datatypes mismatch from DB2 to avro.
+        work around : cast the column before storing as avro.
+5) Java Serilization with kyro.
+
+6) When passing xml file in spark, that xml file should not have empty tags. ( it gives array index out of bound error )
+       May be resolved in spark 2.0. ( current version 1.6 )
+       Work around in 1.6 : Read xml file
+                            write to parquet
+                            Then read DF.
+
